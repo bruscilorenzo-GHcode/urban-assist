@@ -19,13 +19,13 @@ export function totalSize(files: File[]): number {
 export function validateBudget(files: File[]): string | null {
   if (totalSize(files) > MEDIA_TOTAL_BUDGET) return 'budget'
   for (const f of files) {
-    const type = f.type || guessType(f.name)
+    const type = f.type || guessMediaType(f.name)
     if (!validateMediaFile(type, f.size).ok) return 'type'
   }
   return null
 }
 
-function guessType(name: string): string {
+export function guessMediaType(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'heic', 'heif'].includes(ext)) return 'image/*'
   if (['mp4', 'mov', 'webm', 'avi', 'mkv', '3gp'].includes(ext)) return 'video/*'
@@ -49,44 +49,78 @@ async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit, atte
   throw lastError instanceof Error ? lastError : new Error('upload failed')
 }
 
-export async function uploadFile(file: File, onProgress?: (pct: number) => void): Promise<UploadResult> {
-  const contentType = file.type || guessType(file.name)
+export interface UploadSession {
+  id: string
+  chunks: number
+  received: number[]
+}
+
+export interface UploadOptions {
+  /** Resume an existing server session instead of starting a new one. */
+  id?: string
+  onChunk?: (state: { id: string; chunks: number; received: number[] }) => void
+}
+
+async function fetchSession(id: string): Promise<UploadSession | null> {
+  try {
+    const res = await fetchWithRetry(`/api/media-upload?session=${encodeURIComponent(id)}`)
+    if (!res.ok) return null
+    const body = await res.json() as { id?: unknown; chunks?: unknown; received?: unknown }
+    if (typeof body.id !== 'string' || typeof body.chunks !== 'number' || !Array.isArray(body.received)) return null
+    return {
+      id: body.id,
+      chunks: body.chunks,
+      received: body.received.filter((index): index is number => typeof index === 'number'),
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function uploadFile(file: File, onProgress?: (pct: number) => void, options: UploadOptions = {}): Promise<UploadResult> {
+  const contentType = file.type || guessMediaType(file.name)
   const check = validateMediaFile(contentType, file.size)
   if (!check.ok) throw new Error(check.error)
 
-  const init = await fetchWithRetry('/api/media-upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ init: { contentType, size: file.size } }),
-  })
-  if (!init.ok) throw new Error(`init failed (${init.status})`)
-  const { id, chunks } = await init.json() as { id: string, chunks: number }
+  let session = options.id ? await fetchSession(options.id) : null
+  if (!session) {
+    const init = await fetchWithRetry('/api/media-upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ init: { contentType, size: file.size } }),
+    })
+    if (!init.ok) throw new Error(`init failed (${init.status})`)
+    const body = await init.json() as { id: string, chunks: number }
+    session = { id: body.id, chunks: body.chunks, received: [] }
+  }
 
-  const chunksData: Uint8Array[] = []
-  let offset = 0
-  let index = 0
-  while (offset < file.size || file.size === 0) {
+  const received = new Set(session.received)
+  let done = received.size
+  onProgress?.(Math.round((done / session.chunks) * 100))
+  options.onChunk?.({ id: session.id, chunks: session.chunks, received: [...received] })
+
+  for (let index = 0; index < session.chunks; index += 1) {
+    if (received.has(index)) continue
+    const offset = index * CHUNK_SIZE
     const slice = file.slice(offset, Math.min(offset + CHUNK_SIZE, file.size))
     const bytes = new Uint8Array(await slice.arrayBuffer())
-    chunksData.push(bytes)
-    const isLast = index === chunks - 1
     const res = await fetchWithRetry('/api/media-upload', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
-        'x-media-id': id, 'x-chunk-index': String(index), 'x-chunk-total': String(chunks),
+        'x-media-id': session.id, 'x-chunk-index': String(index), 'x-chunk-total': String(session.chunks),
       },
       body: bytes,
     })
     if (!res.ok) throw new Error(`chunk ${index} failed (${res.status})`)
-    offset += bytes.byteLength
-    index += 1
-    onProgress?.(Math.round((index / chunks) * 100))
-    if (isLast) break
+    received.add(index)
+    done += 1
+    onProgress?.(Math.round((done / session.chunks) * 100))
+    options.onChunk?.({ id: session.id, chunks: session.chunks, received: [...received] })
   }
-  void chunksData
+
   const kind = kindOf(contentType) ?? 'text'
-  return { id, kind, size: file.size }
+  return { id: session.id, kind, size: file.size }
 }
 
 /** Convenience: uploads every file and reports per-file progress. */
