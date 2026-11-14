@@ -180,7 +180,7 @@ DevTools; il codice aggiunto non introduce dipendenze e non duplica Leaflet.
 
 Misure aggiornate sullo stesso branch:
 
-- `npm test`: **80 test, 18 file**, tutti verdi (era 40/8).
+- `npm test`: **81 test, 18 file**, tutti verdi (era 40/8).
 - `npm run build`: JS **≈490,4 KB** → **≈149,4 KB gzip**; CSS **34,0 KB** → **10,1 KB gzip**.
   Nessuna dipendenza npm aggiunta: il fabric è canvas + Leaflet già presente; stato, pack e
   calendario sono codice puro e dati.
