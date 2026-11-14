@@ -15,12 +15,35 @@ import {
   type PilotZoneInput,
 } from './pipeline/dramaturgical-zones'
 import type { PublishedStory } from './story.js'
-import { MEDIA_TOTAL_BUDGET, totalSize, uploadAll, validateBudget } from './media-upload'
-import { loadUiLang, storeUiLang, STR, type UiLang } from './i18n'
+import { MEDIA_TOTAL_BUDGET, guessMediaType, totalSize, uploadFile, validateBudget, type UploadResult } from './media-upload'
+import { loadUiLang, storeUiLang, STR, type Strings, type UiLang } from './i18n'
 import { loadMyStories, saveMyStories, type MyStories } from './my-stories'
 import { loadZoneTokens, saveZoneTokens, type ZoneTokens } from './my-zones'
 import { geocodePlace, geocodePlaceInCity } from './geocode'
 import type { City } from './cities'
+import StatePanel from './state-panel'
+import ProjectPanel from './project-panel'
+import { FabricOverlay, type FabricPick } from './fabric-overlay'
+import { cacheState, fetchState, loadCachedState, type StateBundle } from './state-client'
+import { cacheStories, isPublishedStory, loadCachedStories } from './story-cache'
+import { OfflineBanner, ReportPanel, VersionBadge } from './robustness-panel'
+import { installTelemetry, logTechnical, technicalContext, type TelemetryData } from './telemetry'
+import { parseUrlParams, serializeUrlParams } from '../core/state/url.js'
+import { RELATION_TYPES, type FabricConfig, type Query, type RelationType } from '../core/state/types.js'
+import type { ProjectPack } from '../core/packs/types.js'
+import { PALETTE_PRESETS } from '../core/packs/presets.js'
+import {
+  clearDraft,
+  clearQueue,
+  deleteQueueItem,
+  listQueue,
+  loadDraft,
+  makeQueueId,
+  saveDraft,
+  saveQueueItem,
+  type QueueItem,
+  type QueueStatus,
+} from './draft-store'
 import './urban-storytelling.css'
 
 const ARC_COLORS: Record<string, string> = {
@@ -31,9 +54,88 @@ const ARC_COLORS: Record<string, string> = {
 let zoneSyncStarted = false
 
 interface PendingMedia {
+  key: string
+  dz: string
   file: File
   timeline: string
   caption: string
+  status: QueueStatus
+  progress: number
+  received: number[]
+  uploadId?: string
+  kind?: UploadResult['kind']
+  createdAt: string
+}
+
+function readUrlParams() {
+  return typeof window === 'undefined' ? parseUrlParams('') : parseUrlParams(window.location.search)
+}
+
+function isOrdinaryQuery(query: Query): boolean {
+  return query.kind === 'free'
+    && !query.themeId && !query.eventId && !query.text && !query.from && !query.to
+}
+
+function defaultFabricConfig(reducedMotion: boolean): FabricConfig {
+  return {
+    enabled: false,
+    opacity: 0.55,
+    mode: 'filaments',
+    palette: ['#0072B2', '#E69F00', '#009E73', '#000000'],
+    curvature: 0.35,
+    thickness: 1,
+    halo: 0.4,
+    nodeScale: 1,
+    labelZoom: 16,
+    fieldBandMeters: 450,
+    relations: {
+      proximity: true,
+      place: true,
+      cooccurrence: true,
+      topic: true,
+      semantic: false,
+      author_community: true,
+    },
+    reducedMotion,
+  }
+}
+
+function toQueueItem(item: PendingMedia): QueueItem {
+  return {
+    id: item.key,
+    dz: item.dz,
+    blob: item.file,
+    type: item.file.type || guessMediaType(item.file.name),
+    size: item.file.size,
+    timeline: item.timeline,
+    caption: item.caption,
+    status: item.status,
+    progress: item.progress,
+    received: item.received,
+    ...(item.uploadId ? { uploadId: item.uploadId } : {}),
+    ...(item.kind ? { kind: item.kind } : {}),
+    createdAt: item.createdAt,
+  }
+}
+
+function relationLabel(t: Strings, type: RelationType): string {
+  if (type === 'proximity') return t.relationProximity
+  if (type === 'place') return t.relationPlace
+  if (type === 'cooccurrence') return t.relationCooccurrence
+  if (type === 'topic') return t.relationTopic
+  if (type === 'semantic') return t.relationSemantic
+  return t.relationAuthorCommunity
+}
+
+function paletteNameFor(colors: string[]): string | undefined {
+  return PALETTE_PRESETS.find((preset) => preset.colors.join() === colors.join())?.name
+}
+
+function queueStatusLabel(t: Strings, status: QueueStatus): string {
+  if (status === 'uploading') return t.queueStatusUploading
+  if (status === 'done') return t.queueStatusDone
+  if (status === 'error') return t.queueStatusError
+  return t.queueStatusPending
 }
 
 const EMPTY_DRAFT: PilotZoneInput = {
@@ -47,16 +149,6 @@ function browserStorage(): Storage | null {
   } catch {
     return null
   }
-}
-
-function isStory(value: unknown): value is PublishedStory {
-  if (!value || typeof value !== 'object') return false
-  const story = value as Partial<PublishedStory>
-  return typeof story.id === 'string'
-    && typeof story.text === 'string'
-    && typeof story.ts === 'string'
-    && (story.dz === null || typeof story.dz === 'string')
-    && Array.isArray(story.media)
 }
 
 function MediaThumb({ media, alt }: { media: PublishedStory['media'][number]; alt: string }) {
@@ -102,7 +194,11 @@ export default function UrbanStorytelling() {
   const [ui, setUi] = useState<UiLang>(() => loadUiLang(storage))
   const [pilotZones, setPilotZones] = useState<DramaturgicalZone[]>(() => loadPilotZones(storage))
   const zones = useMemo(() => mergeZones(pilotZones), [pilotZones])
-  const [zoneId, setZoneId] = useState(() => loadActiveZoneId(storage, zones) ?? zones[0]!.id)
+  const [zoneId, setZoneId] = useState(() => {
+    const urlDz = readUrlParams().dz
+    if (urlDz && zones.some((candidate) => candidate.id === urlDz)) return urlDz
+    return loadActiveZoneId(storage, zones) ?? zones[0]!.id
+  })
   const zone = zoneById(zones, zoneId)
   const zoneIdRef = useRef(zoneId)
   zoneIdRef.current = zoneId
@@ -147,6 +243,28 @@ export default function UrbanStorytelling() {
   const [selected, setSelected] = useState<string | null>(null)
   const [myStories, setMyStories] = useState<MyStories>(() => loadMyStories(storage))
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [query, setQuery] = useState<Query>(() => readUrlParams().query)
+  const [year, setYear] = useState<number>(() => readUrlParams().year ?? new Date().getFullYear())
+  const [pmMode, setPmMode] = useState<boolean>(() => readUrlParams().pm)
+  const [packId, setPackId] = useState<string | undefined>(() => readUrlParams().pack)
+  const [packOverride, setPackOverride] = useState<ProjectPack | null>(null)
+  const [packLibrary, setPackLibrary] = useState<ProjectPack[]>([])
+  const [bundle, setBundle] = useState<StateBundle | null>(null)
+  const [stateLoading, setStateLoading] = useState(false)
+  const [stateError, setStateError] = useState<string | null>(null)
+  const [cachedAt, setCachedAt] = useState<string | null>(null)
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
+  const [fabricConfig, setFabricConfig] = useState<FabricConfig>(() => defaultFabricConfig(false))
+  const [fabricPick, setFabricPick] = useState<FabricPick | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportContext, setReportContext] = useState<TelemetryData>({})
+  const [draftNotice, setDraftNotice] = useState<string | null>(null)
+  const [storyVersion, setStoryVersion] = useState(0)
+  const overlayRef = useRef<FabricOverlay | null>(null)
+  const appliedPackRef = useRef('')
+  const appliedDefaultRef = useRef<Set<string>>(new Set())
+  const draftZoneRef = useRef<string | null>(null)
+  const initialFabricRef = useRef(readUrlParams().fabric)
   const t = STR[ui]
 
   const focusZone = useCallback((next: DramaturgicalZone) => {
@@ -181,6 +299,11 @@ export default function UrbanStorytelling() {
     const next = zones.find((candidate) => candidate.id === id)
     if (!next || next.status === 'coming') return
     focusZone(next)
+    setQuery({ kind: 'free' })
+    setYear(new Date().getFullYear())
+    setPackOverride(null)
+    setPackId(undefined)
+    setFabricPick(null)
   }, [focusZone, zones])
 
   const locationErrorMessage = useCallback((error: GeolocationPositionError) => {
@@ -413,10 +536,11 @@ export default function UrbanStorytelling() {
     void (async () => {
       try {
         const res = await fetch(`/api/story?dz=${encodeURIComponent(zone.id)}`)
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const body = await res.json() as { stories?: unknown }
-        const remote = Array.isArray(body.stories) ? body.stories.filter(isStory) : []
+        const remote = Array.isArray(body.stories) ? body.stories.filter(isPublishedStory) : []
         if (cancelled) return
+        cacheStories(zone.id, remote, storage)
         setStories((prev) => {
           const remoteIds = new Set(remote.map((story) => story.id))
           const localZone = prev.filter((story) => story.dz === zone.id && !remoteIds.has(story.id))
@@ -424,11 +548,18 @@ export default function UrbanStorytelling() {
           return [...remote, ...localZone, ...others].slice(0, 144)
         })
       } catch {
-        // Static-only deploy or network hiccup: keep the local session.
+        // Offline: restore the last loaded wall of this DZ (text/media ids);
+        // media bytes follow the browser cache.
+        const cached = loadCachedStories(zone.id, storage)
+        if (!cached || cancelled) return
+        setStories((prev) => {
+          if (prev.some((story) => story.dz === zone.id)) return prev
+          return [...cached.stories, ...prev.filter((story) => story.dz !== zone.id)].slice(0, 144)
+        })
       }
     })()
     return () => { cancelled = true }
-  }, [zone.id])
+  }, [zone.id, storage])
 
   useEffect(() => {
     const layer = storyLayer.current
@@ -442,6 +573,251 @@ export default function UrbanStorytelling() {
       }).addTo(layer).on('click', () => setSelected(story.id))
     }
   }, [zoneStories, zone.center])
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine)
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
+
+  useEffect(() => installTelemetry(), [])
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const apply = () => setFabricConfig((prev) => ({ ...prev, reducedMotion: media.matches }))
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
+  }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const overlay = new FabricOverlay(map, (pick) => {
+      setFabricPick(pick)
+      if (pick.storyId) setSelected(pick.storyId)
+      logTechnical('fabric.pick', { kind: pick.kind, dz: zoneIdRef.current })
+    })
+    overlayRef.current = overlay
+    return () => {
+      overlay.destroy()
+      overlayRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    overlayRef.current?.setConfig(fabricConfig)
+  }, [fabricConfig])
+
+  useEffect(() => {
+    overlayRef.current?.setState(bundle?.state ?? null)
+  }, [bundle])
+
+  const queryKey = JSON.stringify(query)
+  const packOverrideKey = packOverride ? JSON.stringify(packOverride) : ''
+
+  useEffect(() => {
+    setBundle(null)
+    setFabricPick(null)
+    setCachedAt(null)
+  }, [zone.id])
+
+  useEffect(() => {
+    let cancelled = false
+    setStateLoading(true)
+    setStateError(null)
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const started = Date.now()
+        try {
+          const next = await fetchState({
+            dz: zone.id,
+            query,
+            lang: ui,
+            ...(packId ? { packId } : {}),
+            ...(packOverride ? { packOverride } : {}),
+            year,
+          })
+          if (cancelled) return
+          setBundle(next)
+          setCachedAt(null)
+          cacheState(next, zone.id, storage)
+          logTechnical('state.fetch', { status: 200, durationMs: Date.now() - started, dz: zone.id, queryKind: query.kind })
+        } catch (error) {
+          if (cancelled) return
+          const cached = loadCachedState(zone.id, storage)
+          if (cached) {
+            setBundle(cached.bundle)
+            setCachedAt(cached.at)
+          } else {
+            setBundle(null)
+          }
+          setStateError(error instanceof Error ? error.message : 'state unavailable')
+          logTechnical('state.fetch.error', {
+            status: 0,
+            durationMs: Date.now() - started,
+            dz: zone.id,
+            error: error instanceof Error ? error.name : 'Error',
+          })
+        } finally {
+          if (!cancelled) setStateLoading(false)
+        }
+      })()
+    }, packOverride ? 350 : 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [zone.id, queryKey, ui, packId, packOverrideKey, year, storage, storyVersion])
+
+  useEffect(() => {
+    if (!bundle) return
+    const signature = `${bundle.pack.id}:${JSON.stringify(bundle.pack.fabric)}`
+    if (appliedPackRef.current === signature) return
+    const firstApplication = appliedPackRef.current === ''
+    appliedPackRef.current = signature
+    const urlFabric = initialFabricRef.current
+    const urlPalette = firstApplication && urlFabric.palette
+      ? PALETTE_PRESETS.find((preset) => preset.name === urlFabric.palette)
+      : undefined
+    setFabricConfig((prev) => ({
+      ...prev,
+      mode: (firstApplication ? urlFabric.mode : undefined) ?? bundle.pack.fabric.defaultMode,
+      opacity: (firstApplication ? urlFabric.opacity : undefined) ?? bundle.pack.defaults.opacity ?? bundle.pack.fabric.defaultOpacity,
+      palette: urlPalette ? [...urlPalette.colors] : [...bundle.pack.fabric.palette.colors],
+      curvature: (firstApplication ? urlFabric.curvature : undefined) ?? bundle.pack.fabric.curvature,
+      thickness: (firstApplication ? urlFabric.thickness : undefined) ?? bundle.pack.fabric.thickness,
+      halo: (firstApplication ? urlFabric.halo : undefined) ?? bundle.pack.fabric.halo,
+      nodeScale: bundle.pack.fabric.nodeScale,
+      labelZoom: bundle.pack.fabric.labelZoom,
+      fieldBandMeters: bundle.pack.fabric.fieldBandMeters,
+      enabled: prev.enabled || (firstApplication && urlFabric.on === true),
+    }))
+  }, [bundle])
+
+  useEffect(() => {
+    if (!bundle) return
+    if (appliedDefaultRef.current.has(bundle.pack.id)) return
+    appliedDefaultRef.current.add(bundle.pack.id)
+    if (bundle.pack.defaults.query && isOrdinaryQuery(query)) setQuery(bundle.pack.defaults.query)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bundle])
+
+  useEffect(() => {
+    if (!pmMode) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/packs')
+        if (!res.ok) return
+        const body = await res.json() as { packs?: ProjectPack[] }
+        if (!cancelled && Array.isArray(body.packs)) setPackLibrary(body.packs)
+      } catch {
+        // Offline: the current pack still works.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [pmMode])
+
+  useEffect(() => {
+    const draft = loadDraft(storage, zone.id)
+    draftZoneRef.current = zone.id
+    if (!draft || !draft.text.trim()) return
+    setText(draft.text)
+    setLang(draft.lang)
+    setComparative(draft.comparative)
+    setGeoMode(draft.geoMode)
+    if (draft.point) setPoint(draft.point)
+    if (draft.text.trim()) {
+      setDraftNotice(t.draftRestored)
+      window.setTimeout(() => setDraftNotice(null), 4000)
+    }
+  }, [zone.id, storage, t.draftRestored])
+
+  useEffect(() => {
+    if (draftZoneRef.current !== zone.id) return
+    const timer = window.setTimeout(() => {
+      saveDraft(storage, zone.id, { text, lang, comparative, geoMode, point })
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [text, lang, comparative, geoMode, point, zone.id, storage])
+
+  useEffect(() => {
+    let cancelled = false
+    void listQueue(zone.id).then((items) => {
+      if (cancelled) return
+      setPendingMedia(items.map((item) => ({
+        key: item.id,
+        dz: item.dz,
+        file: new File([item.blob], 'media', { type: item.type }),
+        timeline: item.timeline,
+        caption: item.caption,
+        status: item.status === 'uploading' ? 'pending' : item.status,
+        progress: item.progress,
+        received: item.received,
+        ...(item.uploadId ? { uploadId: item.uploadId } : {}),
+        ...(item.kind ? { kind: item.kind } : {}),
+        createdAt: item.createdAt,
+      })))
+    })
+    return () => { cancelled = true }
+  }, [zone.id])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const search = serializeUrlParams({
+      dz: zone.id,
+      ...(packId ? { pack: packId } : {}),
+      pm: pmMode,
+      query,
+      fabric: {
+        on: fabricConfig.enabled,
+        mode: fabricConfig.mode,
+        opacity: fabricConfig.opacity,
+        ...(paletteNameFor(fabricConfig.palette) ? { palette: paletteNameFor(fabricConfig.palette) } : {}),
+        curvature: fabricConfig.curvature,
+        thickness: fabricConfig.thickness,
+        halo: fabricConfig.halo,
+      },
+      year,
+    })
+    const next = `${window.location.pathname}${search}`
+    if (`${window.location.pathname}${window.location.search}` !== next) window.history.replaceState(null, '', next)
+  }, [zone.id, packId, pmMode, query, fabricConfig, year])
+
+  useEffect(() => {
+    const onPop = () => {
+      const params = readUrlParams()
+      if (params.dz && zones.some((candidate) => candidate.id === params.dz)) setZoneId(params.dz)
+      setQuery(params.query)
+      setYear(params.year ?? new Date().getFullYear())
+      setPmMode(params.pm)
+      setPackId(params.pack)
+      setPackOverride(null)
+      setFabricConfig((prev) => {
+        const preset = params.fabric.palette
+          ? PALETTE_PRESETS.find((candidate) => candidate.name === params.fabric.palette)
+          : undefined
+        return {
+          ...prev,
+          ...(params.fabric.on !== undefined ? { enabled: params.fabric.on } : {}),
+          ...(params.fabric.mode ? { mode: params.fabric.mode } : {}),
+          ...(params.fabric.opacity !== undefined ? { opacity: params.fabric.opacity } : {}),
+          ...(preset ? { palette: [...preset.colors] } : {}),
+          ...(params.fabric.curvature !== undefined ? { curvature: params.fabric.curvature } : {}),
+          ...(params.fabric.thickness !== undefined ? { thickness: params.fabric.thickness } : {}),
+          ...(params.fabric.halo !== undefined ? { halo: params.fabric.halo } : {}),
+        }
+      })
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [zones])
 
   const createZone = useCallback(async () => {
     const query = draft.city.trim() || draft.name.trim()
@@ -628,8 +1004,84 @@ export default function UrbanStorytelling() {
     const files = list ? Array.from(list) : []
     const invalid = validateBudget(files)
     setError(invalid === 'budget' ? t.budgetErr : invalid === 'type' ? t.typeErr : null)
-    if (!invalid) setPendingMedia(files.map((file) => ({ file, timeline: '', caption: '' })))
-  }, [t])
+    if (invalid) return
+    const createdAt = new Date().toISOString()
+    const items: PendingMedia[] = files.map((file) => ({
+      key: makeQueueId(),
+      dz: zone.id,
+      file,
+      timeline: '',
+      caption: '',
+      status: 'pending',
+      progress: 0,
+      received: [],
+      createdAt,
+    }))
+    setPendingMedia((prev) => [...prev, ...items])
+    for (const item of items) void saveQueueItem(toQueueItem(item))
+    logTechnical('media.queued', { count: items.length, dz: zone.id })
+  }, [t, zone.id])
+
+  const updatePending = useCallback((key: string, patch: Partial<PendingMedia>) => {
+    setPendingMedia((prev) => {
+      const next = prev.map((item) => item.key === key ? { ...item, ...patch } : item)
+      const changed = next.find((item) => item.key === key)
+      if (changed) void saveQueueItem(toQueueItem(changed))
+      return next
+    })
+  }, [])
+
+  const removePending = useCallback((key: string) => {
+    setPendingMedia((prev) => prev.filter((item) => item.key !== key))
+    void deleteQueueItem(key)
+  }, [])
+
+  const uploadPending = useCallback(async (): Promise<UploadResult[]> => {
+    const items = pendingMedia
+    const results: UploadResult[] = []
+    for (const [index, item] of items.entries()) {
+      if (item.status === 'done' && item.uploadId && item.kind) {
+        results.push({ id: item.uploadId, kind: item.kind, size: item.file.size })
+        continue
+      }
+      updatePending(item.key, { status: 'uploading' })
+      try {
+        const result = await uploadFile(item.file, (pct) => {
+          updatePending(item.key, { progress: pct })
+          setUploadPct(Math.round(((index + pct / 100) / Math.max(1, items.length)) * 100))
+        }, {
+          ...(item.uploadId ? { id: item.uploadId } : {}),
+          onChunk: (session) => updatePending(item.key, {
+            uploadId: session.id,
+            received: session.received,
+            progress: Math.round((session.received.length / Math.max(1, session.chunks)) * 100),
+          }),
+        })
+        updatePending(item.key, { status: 'done', progress: 100, uploadId: result.id, kind: result.kind })
+        results.push(result)
+      } catch (error) {
+        updatePending(item.key, { status: 'error' })
+        throw error
+      }
+    }
+    return results
+  }, [pendingMedia, updatePending])
+
+  const resumeUploads = useCallback(async () => {
+    if (pendingMedia.length === 0) return
+    setBusy(true)
+    setError(null)
+    setUploadPct(0)
+    try {
+      await uploadPending()
+      logTechnical('media.resume', { count: pendingMedia.length, dz: zone.id })
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t.typeErr)
+    } finally {
+      setUploadPct(null)
+      setBusy(false)
+    }
+  }, [pendingMedia.length, uploadPending, t.typeErr, zone.id])
 
   const publish = useCallback(async () => {
     if (text.trim().length === 0) { setError(t.errorEmpty); return }
@@ -643,7 +1095,7 @@ export default function UrbanStorytelling() {
     try {
       if (pendingMedia.length > 0) {
         setUploadPct(0)
-        const uploaded = await uploadAll(pendingMedia.map((item) => item.file), (pct) => setUploadPct(pct))
+        const uploaded = await uploadPending()
         media = uploaded.map((result, index) => {
           const item = pendingMedia[index]
           return {
@@ -680,16 +1132,23 @@ export default function UrbanStorytelling() {
         })
       }
       setStories((prev) => [story, ...prev].slice(0, 48))
+      cacheStories(zone.id, [story, ...zoneStories].slice(0, 48), storage)
       setSelected(story.id)
       setPendingMedia([])
       setText('')
+      setDraftNotice(null)
+      await clearQueue(zone.id)
+      clearDraft(storage, zone.id)
+      setStoryVersion((value) => value + 1)
+      logTechnical('story.publish', { status: 200, dz: zone.id, count: media?.length ?? 0, kind: 'story' })
     } catch (e) {
       setError(e instanceof Error ? e.message : t.typeErr)
+      logTechnical('story.publish.error', { status: 0, dz: zone.id, error: e instanceof Error ? e.name : 'Error' })
     } finally {
       setUploadPct(null)
       setBusy(false)
     }
-  }, [text, pendingMedia, comparative, lang, geoMode, point, zone.id, t])
+  }, [text, pendingMedia, comparative, lang, geoMode, point, zone.id, t, uploadPending, storage])
 
   const deleteStory = useCallback(async (story: PublishedStory) => {
     const token = myStories[story.id]
@@ -706,6 +1165,7 @@ export default function UrbanStorytelling() {
       const body = await res.json().catch(() => ({} as { error?: string }))
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setStories((prev) => prev.filter((candidate) => candidate.id !== story.id))
+      cacheStories(zone.id, zoneStories.filter((candidate) => candidate.id !== story.id), storage)
       setMyStories((prev) => {
         const next = { ...prev }
         delete next[story.id]
@@ -713,6 +1173,7 @@ export default function UrbanStorytelling() {
         return next
       })
       if (selected === story.id) setSelected(null)
+      setStoryVersion((value) => value + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : t.deleteFailed)
     } finally {
@@ -743,6 +1204,31 @@ export default function UrbanStorytelling() {
 
   const selectedStory = zoneStories.find((story) => story.id === selected) ?? null
   const draftError = zoneError
+  const shareSearch = serializeUrlParams({
+    dz: zone.id,
+    ...(packId ? { pack: packId } : {}),
+    pm: pmMode,
+    query,
+    fabric: {
+      on: fabricConfig.enabled,
+      mode: fabricConfig.mode,
+      opacity: fabricConfig.opacity,
+      ...(paletteNameFor(fabricConfig.palette) ? { palette: paletteNameFor(fabricConfig.palette) } : {}),
+      curvature: fabricConfig.curvature,
+      thickness: fabricConfig.thickness,
+      halo: fabricConfig.halo,
+    },
+    year,
+  })
+  const shareUrl = typeof window === 'undefined' ? '' : `${window.location.origin}${window.location.pathname}${shareSearch}`
+  const openReport = () => {
+    setReportContext(technicalContext({
+      dz: zone.id,
+      ...(packId ? { pack: packId } : {}),
+      ...(bundle ? { matched: bundle.state.coverage.matched, total: bundle.state.coverage.total } : {}),
+    }))
+    setReportOpen(true)
+  }
 
   return (
     <main className="au">
@@ -818,6 +1304,8 @@ export default function UrbanStorytelling() {
         <p className="au-hint">{zone.focus[ui]}</p>
         {pilotMode && <p className="au-hint au-pilot-hint">{t.pilotHint}</p>}
       </header>
+
+      {!online && <OfflineBanner t={t} cachedAt={cachedAt} />}
 
       {pilotMode && pilotZones.length > 0 && (
         <section className="au-zone-manage" data-testid="dz-manage">
@@ -937,7 +1425,29 @@ export default function UrbanStorytelling() {
         </section>
       )}
 
+      {pmMode && bundle && (
+        <ProjectPanel
+          ui={ui}
+          t={t}
+          pack={packOverride ?? bundle.pack}
+          library={packLibrary}
+          shareUrl={shareUrl}
+          onApply={(next) => {
+            setPackOverride(next)
+            setPackId(packLibrary.some((candidate) => candidate.id === next.id) ? next.id : undefined)
+          }}
+          onSaved={(saved) => {
+            setPackOverride(null)
+            setPackId(saved.id)
+            setPackLibrary((prev) => [...prev.filter((candidate) => candidate.id !== saved.id), saved])
+          }}
+          onApplyDefaults={(next) => setQuery(next ?? { kind: 'free' })}
+          onClose={() => setPmMode(false)}
+        />
+      )}
+
       <nav className="au-sectionnav" aria-label={t.sections}>
+        <a href="#au-state">{t.stateTitle}</a>
         <a href="#au-map">{t.mapTitle}</a>
         <a href="#au-story">{t.storyTitle}</a>
         <a href="#au-wall">{t.wallTitle}</a>
@@ -945,9 +1455,123 @@ export default function UrbanStorytelling() {
 
       <section className="au-grid">
         <div className="au-col">
+          <div className="au-card" id="au-state">
+            <StatePanel
+              ui={ui}
+              t={t}
+              pack={bundle?.pack ?? null}
+              calendar={bundle?.calendar ?? null}
+              state={bundle?.state ?? null}
+              loading={stateLoading}
+              error={stateError}
+              query={query}
+              year={year}
+              onQuery={setQuery}
+              onYear={setYear}
+              onSelectStory={setSelected}
+            />
+          </div>
+
           <div className="au-card" id="au-map">
             <h2>{t.mapTitle}</h2>
             <div ref={mapDiv} className="au-map" />
+            <div className="au-fabric-controls">
+              <button
+                type="button"
+                className={`au-chip${fabricConfig.enabled ? ' on' : ''}`}
+                aria-pressed={fabricConfig.enabled}
+                data-testid="fabric-toggle"
+                onClick={() => setFabricConfig((prev) => ({ ...prev, enabled: !prev.enabled }))}
+              >
+                {t.fabricToggle}
+              </button>
+              {fabricConfig.enabled && (
+                <>
+                  <label>{t.fabricMode}
+                    <select
+                      value={fabricConfig.mode}
+                      onChange={(event) => setFabricConfig((prev) => ({ ...prev, mode: event.target.value === 'field' ? 'field' : 'filaments' }))}
+                    >
+                      <option value="filaments">{t.fabricFilaments}</option>
+                      <option value="field">{t.fabricField}</option>
+                    </select>
+                  </label>
+                  <label>{t.fabricOpacity} · {Math.round(fabricConfig.opacity * 100)}%
+                    <input
+                      type="range" min={0} max={100} step={1}
+                      value={Math.round(fabricConfig.opacity * 100)}
+                      onChange={(event) => setFabricConfig((prev) => ({ ...prev, opacity: Number(event.target.value) / 100 }))}
+                    />
+                  </label>
+                  {fabricConfig.reducedMotion && <span className="au-hint">{t.fabricReducedMotion}</span>}
+                </>
+              )}
+            </div>
+
+            {fabricConfig.enabled && (
+              <div className="au-fabric-relations">
+                <span className="au-media-label">{t.fabricRelations}</span>
+                {RELATION_TYPES.map((type) => {
+                  const relation = bundle?.state.fabric.relations.find((candidate) => candidate.type === type)
+                  const unavailable = type === 'semantic' || (relation ? !relation.available : false)
+                  return (
+                    <label key={type} className={unavailable ? 'off' : ''} title={unavailable ? `${t.relationUnavailable}: ${relation?.reason ?? 'no_embeddings'}` : ''}>
+                      <input
+                        type="checkbox"
+                        checked={fabricConfig.relations[type]}
+                        disabled={type === 'semantic'}
+                        onChange={() => setFabricConfig((prev) => ({
+                          ...prev,
+                          relations: { ...prev.relations, [type]: !prev.relations[type] },
+                        }))}
+                      />
+                      {relationLabel(t, type)}{unavailable ? ` · ${t.relationUnavailable}` : ''}
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+
+            {bundle?.state.fabric.indicators.sparse && <p className="au-hint au-state-sparse">{t.fabricSparse}</p>}
+
+            {fabricConfig.enabled && (
+              <div className="au-fabric-inspect">
+                <span className="au-media-label">{t.fabricInspect}</span>
+                {fabricPick && (
+                  <div className="au-fabric-pick">
+                    <b>{fabricPick.kind} · {fabricPick.title}</b>
+                    <p>{fabricPick.body}</p>
+                    <button type="button" className="au-chip" onClick={() => setFabricPick(null)}>{t.projectClose}</button>
+                  </div>
+                )}
+                <div className="au-fabric-elements">
+                  {(bundle?.state.fabric.edges ?? []).slice(0, 5).map((edge) => (
+                    <button
+                      key={edge.id}
+                      type="button"
+                      className="au-chip"
+                      onClick={() => setFabricPick({ kind: 'edge', id: edge.id, title: relationLabel(t, edge.type), body: edge.explanation })}
+                    >
+                      {relationLabel(t, edge.type)}
+                    </button>
+                  ))}
+                  {(bundle?.state.fabric.zones ?? []).slice(0, 5).map((zone) => (
+                    <button
+                      key={zone.cell}
+                      type="button"
+                      className="au-chip"
+                      onClick={() => setFabricPick({ kind: 'zone', id: zone.cell, title: zone.cell, body: zone.explanation })}
+                    >
+                      {zone.count} · {zone.cell.slice(-8)}
+                    </button>
+                  ))}
+                  {(!bundle || (bundle.state.fabric.edges.length === 0 && bundle.state.fabric.zones.length === 0)) && (
+                    <span className="au-hint">{t.fabricNoElements}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="au-geo-actions">
               <button type="button" className="au-chip" data-testid="au-locate" disabled={locating} onClick={locateMe}>
                 {locating ? t.locating : t.locateMe}
@@ -970,6 +1594,7 @@ export default function UrbanStorytelling() {
             </div>
             <textarea className="au-text" value={text} rows={5} placeholder={t.storyPh}
               onChange={(e) => setText(e.target.value)} />
+            {draftNotice && <p className="au-hint au-zone-notice">{draftNotice}</p>}
             <div className="au-row au-tight">
               <input ref={fileInput} type="file" multiple hidden
                 accept="image/*,video/*,audio/*,.txt,.md,.csv"
@@ -994,9 +1619,12 @@ export default function UrbanStorytelling() {
               <div className="au-files">
                 <span className="au-media-label">{(totalSize(pendingMedia.map((item) => item.file)) / 1024 / 1024).toFixed(2)} / 50 MB</span>
                 <ul>
-                  {pendingMedia.map((item, index) => (
-                    <li key={`${item.file.name}-${index}`} className="au-file-row">
-                      <span className="au-wall-mood">{item.file.type || 'file'} · {(item.file.size / 1024).toFixed(0)} kB</span>
+                  {pendingMedia.map((item) => (
+                    <li key={item.key} className="au-file-row">
+                      <span className="au-wall-mood">
+                        {item.file.type || 'file'} · {(item.file.size / 1024).toFixed(0)} kB · {queueStatusLabel(t, item.status)}
+                        {(item.status === 'pending' || item.status === 'uploading') ? ` · ${item.progress}%` : ''}
+                      </span>
                       {comparative && (
                         <input
                           className="au-media-input"
@@ -1004,7 +1632,7 @@ export default function UrbanStorytelling() {
                           maxLength={40}
                           placeholder={t.timelineLabel}
                           aria-label={t.timelineLabel}
-                          onChange={(event) => setPendingMedia((prev) => prev.map((candidate, i) => i === index ? { ...candidate, timeline: event.target.value } : candidate))}
+                          onChange={(event) => updatePending(item.key, { timeline: event.target.value })}
                         />
                       )}
                       <input
@@ -1013,12 +1641,24 @@ export default function UrbanStorytelling() {
                         maxLength={80}
                         placeholder={t.captionLabel}
                         aria-label={t.captionLabel}
-                        onChange={(event) => setPendingMedia((prev) => prev.map((candidate, i) => i === index ? { ...candidate, caption: event.target.value } : candidate))}
+                        onChange={(event) => updatePending(item.key, { caption: event.target.value })}
                       />
-                      <button className="au-chip" onClick={() => setPendingMedia((prev) => prev.filter((_, i) => i !== index))}>{t.remove}</button>
+                      <button className="au-chip" onClick={() => removePending(item.key)}>{t.remove}</button>
                     </li>
                   ))}
                 </ul>
+                <div className="au-row au-tight">
+                  <span className="au-media-label">{t.queueTitle}</span>
+                  <button
+                    type="button"
+                    className="au-chip"
+                    disabled={busy || pendingMedia.every((item) => item.status === 'done')}
+                    onClick={() => void resumeUploads()}
+                  >
+                    {t.queueResume}
+                  </button>
+                </div>
+                <p className="au-hint">{t.queueResumedNote}</p>
               </div>
             )}
             <p className="au-hint">{t.uploadHint}</p>
@@ -1106,9 +1746,15 @@ export default function UrbanStorytelling() {
         </div>
       </section>
 
+      {reportOpen && <ReportPanel t={t} context={reportContext} onClose={() => setReportOpen(false)} />}
+
       <footer className="au-foot">
         <span>{t.privacy}</span>
         <span>{t.footRight}</span>
+        <span className="au-foot-tools">
+          <VersionBadge t={t} />
+          <button type="button" className="au-chip" onClick={openReport}>{t.reportProblem}</button>
+        </span>
       </footer>
     </main>
   )
