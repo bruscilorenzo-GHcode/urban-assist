@@ -56,8 +56,10 @@ export default function StatePanel(props: StatePanelProps) {
     setDraft(currentText)
   }, [currentText])
 
+  // Always carry the text currently in the field: clicking a theme or an
+  // event must not discard uncommitted typing. Explicit overrides win.
   const commit = (override: QueryParts = {}) => {
-    onQuery(composeQuery({ ...parts, ...override }))
+    onQuery(composeQuery({ ...parts, text: draft.trim() || undefined, ...override }))
   }
 
   const activeTheme = pack?.themes.find((theme) => theme.id === parts.themeId) ?? null

@@ -78,7 +78,7 @@ export class FabricOverlay {
   }
 
   private readonly onMove = (event: L.LeafletMouseEvent) => {
-    if (!this.config?.enabled) return
+    if (!this.config?.enabled || this.config.opacity <= 0) return
     const pick = this.pickAt(event.containerPoint.x, event.containerPoint.y)
     const next = pick && pick.kind !== 'zone'
       ? { kind: pick.kind, id: pick.id, x: event.containerPoint.x, y: event.containerPoint.y, label: pick.title }
@@ -95,7 +95,7 @@ export class FabricOverlay {
   }
 
   private readonly onClick = (event: MouseEvent) => {
-    if (!this.config?.enabled) return
+    if (!this.config?.enabled || this.config.opacity <= 0) return
     const target = event.target as Element | null
     if (target?.closest('.leaflet-marker-icon, .leaflet-control, .au-fabric-label')) return
     const rect = this.canvas.getBoundingClientRect()
