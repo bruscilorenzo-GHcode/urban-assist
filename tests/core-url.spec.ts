@@ -40,6 +40,12 @@ describe('shareable state URLs', () => {
     expect(parsed.fabric.opacity).toBe(1)
   })
 
+  it('round-trips the PM appearance so a palette/opacity link is shareable', () => {
+    const parsed = parseUrlParams('?dz=dz_test_01&fab=1&fm=field&fo=55&pal=ocean_ink&cur=40&th=18&hal=30')
+    expect(parsed.fabric).toEqual({ on: true, mode: 'field', opacity: 0.55, palette: 'ocean_ink', curvature: 0.4, thickness: 1.8, halo: 0.3 })
+    expect(parseUrlParams(serializeUrlParams(parsed)).fabric).toEqual(parsed.fabric)
+  })
+
   it('builds the same keys for the server request plus the UI language', () => {
     const params = new URLSearchParams(stateRequestParams({
       dz: 'dz_test_01',
