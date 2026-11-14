@@ -26,7 +26,21 @@ export default async (req: Request, _ctx: Context): Promise<Response> => {
 
   try {
     if (req.method === 'GET') {
-      const id = new URL(req.url).searchParams.get('id')
+      const url = new URL(req.url)
+      // Resumable upload: which chunks already arrived for this session.
+      const session = url.searchParams.get('session')
+      if (session !== null) {
+        if (!/^[a-f0-9]{18}$/.test(session)) return json(400, { error: 'bad session' }, cors)
+        const init = await store.get(`init:${session}`, { type: 'json' }) as { chunks: number } | null
+        if (!init) return json(404, { error: 'upload session not found' }, cors)
+        const listed = await store.list({ prefix: `chunk:${session}:` })
+        const received = listed.blobs
+          .map((blob) => Number(blob.key.split(':').at(-1)))
+          .filter((index) => Number.isInteger(index) && index >= 0 && index < init.chunks)
+          .sort((a, b) => a - b)
+        return json(200, { id: session, chunks: init.chunks, received }, cors)
+      }
+      const id = url.searchParams.get('id')
       if (!id || !/^[a-f0-9]{18}$/.test(id)) return json(400, { error: 'bad id' }, cors)
       const blob = await store.get(`media:${id}`, { type: 'arrayBuffer' })
       if (!blob) return json(404, { error: 'not found' }, cors)

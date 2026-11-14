@@ -42,6 +42,24 @@
   to = "/.netlify/functions/media"
   status = 200
 
+# Emergent state: computed server-side from packs + calendar + stories.
+[[redirects]]
+  from = "/api/state"
+  to = "/.netlify/functions/state"
+  status = 200
+
+# Project packs: seed + PM-saved (data, no deploy).
+[[redirects]]
+  from = "/api/packs"
+  to = "/.netlify/functions/packs"
+  status = 200
+
+# Technical telemetry: no story text, allow-listed keys only.
+[[redirects]]
+  from = "/api/telemetry"
+  to = "/.netlify/functions/telemetry"
+  status = 200
+
 # Single-page app: every path serves the app.
 [[redirects]]
   from = "/*"
