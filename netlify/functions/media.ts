@@ -11,8 +11,13 @@ export default async (req: Request, _ctx: Context): Promise<Response> => {
   const store = getStore('assist-urban-media', { consistency: 'strong' })
   const blob = await store.get(`media:${id}`, { type: 'arrayBuffer' })
   if (!blob) return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { ...cors, 'Content-Type': 'application/json' } })
-  const meta = await store.getMetadata(`media:${id}`)
-  const contentType = (meta as { contentType?: string } | null)?.contentType ?? 'application/octet-stream'
+  // @netlify/blobs ≥ v10 returns { etag, metadata }; older versions returned
+  // the metadata object itself. Support both shapes.
+  const rawMeta = await store.getMetadata(`media:${id}`) as unknown
+  const meta = (rawMeta && typeof rawMeta === 'object' && 'metadata' in rawMeta
+    ? (rawMeta as { metadata?: { contentType?: string } }).metadata
+    : rawMeta) as { contentType?: string } | null | undefined
+  const contentType = meta?.contentType ?? 'application/octet-stream'
   return new Response(blob, {
     status: 200,
     headers: { ...cors, 'Content-Type': contentType, 'Cache-Control': 'public, max-age=31536000, immutable' },

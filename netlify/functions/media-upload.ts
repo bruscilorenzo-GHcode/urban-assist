@@ -44,8 +44,11 @@ export default async (req: Request, _ctx: Context): Promise<Response> => {
       if (!id || !/^[a-f0-9]{18}$/.test(id)) return json(400, { error: 'bad id' }, cors)
       const blob = await store.get(`media:${id}`, { type: 'arrayBuffer' })
       if (!blob) return json(404, { error: 'not found' }, cors)
-      const meta = await store.getMetadata(`media:${id}`)
-      const contentType = (meta as { contentType?: string } | null)?.contentType ?? 'application/octet-stream'
+      const rawMeta = await store.getMetadata(`media:${id}`) as unknown
+      const meta = (rawMeta && typeof rawMeta === 'object' && 'metadata' in rawMeta
+        ? (rawMeta as { metadata?: { contentType?: string } }).metadata
+        : rawMeta) as { contentType?: string } | null | undefined
+      const contentType = meta?.contentType ?? 'application/octet-stream'
       return new Response(blob, {
         status: 200,
         headers: { ...cors, 'Content-Type': contentType, 'Cache-Control': 'public, max-age=31536000, immutable' },
