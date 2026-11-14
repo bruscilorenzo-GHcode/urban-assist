@@ -4,7 +4,7 @@
 import type { EventConfidence, EventScope, EventStatus, EventTemplate, RecurrenceKind } from '../calendar/types.js'
 import { asLocalized, type Lang, type Localized } from '../types.js'
 import { DEFAULT_FABRIC, defaultCopy } from './defaults.js'
-import { MAX_PALETTE_COLORS, MIN_PALETTE_COLORS, isSafeHexColor } from './presets.js'
+import { MAX_PALETTE_COLORS, MIN_PALETTE_COLORS, SAFE_PACK_COLORS, isSafeHexColor } from './presets.js'
 import type { FabricPalette, PackIssue, PackParseResult, ProjectPack, ThemeDefinition } from './types.js'
 import type { Query } from '../state/types.js'
 
@@ -104,8 +104,13 @@ function parsePalette(value: unknown, issues: PackIssue[], path: string): Fabric
   for (const color of colorsRaw) {
     if (typeof color !== 'string') continue
     const hex = color.trim()
-    if (isSafeHexColor(hex)) colors.push(hex.toUpperCase())
-    else issues.push({ code: 'pack.fabric.palette.hex', path: `${path}.colors`, params: { color: hex.slice(0, 10) } })
+    if (!isSafeHexColor(hex)) {
+      issues.push({ code: 'pack.fabric.palette.hex', path: `${path}.colors`, params: { color: hex.slice(0, 10) } })
+    } else if (!SAFE_PACK_COLORS.has(hex.toUpperCase())) {
+      issues.push({ code: 'pack.fabric.palette.unsafe', path: `${path}.colors`, params: { color: hex.slice(0, 10) } })
+    } else {
+      colors.push(hex.toUpperCase())
+    }
   }
   if (colors.length < MIN_PALETTE_COLORS) issues.push({ code: 'pack.fabric.palette.min', path: `${path}.colors`, params: { min: MIN_PALETTE_COLORS } })
   if (colors.length > MAX_PALETTE_COLORS) issues.push({ code: 'pack.fabric.palette.max', path: `${path}.colors`, params: { max: MAX_PALETTE_COLORS } })
@@ -274,6 +279,13 @@ export function parseProjectPack(raw: unknown): PackParseResult {
       return
     }
     templateIds.add(template.id)
+    if (template.scope === 'local' && template.territory !== territoryId) {
+      issues.push({
+        code: 'pack.event.territory_mismatch',
+        path: `eventTemplates[${index}].territory`,
+        params: { territory: template.territory, pack: territoryId },
+      })
+    }
     eventTemplates.push(template)
   })
 
@@ -409,6 +421,7 @@ const ISSUE_MESSAGES: Record<string, Localized> = {
   'pack.event.retrieved': { it: 'Data di recupero della fonte non valida.', en: 'Invalid source retrieval date.' },
   'pack.event.confidence': { it: 'Confidenza evento non valida.', en: 'Invalid event confidence.' },
   'pack.event.duplicate': { it: 'Evento duplicato: {id}.', en: 'Duplicate event: {id}.' },
+  'pack.event.territory_mismatch': { it: 'Evento locale del territorio {territory}, ma il pack è {pack}.', en: 'Local event for territory {territory}, but the pack is {pack}.' },
   'pack.event.duration': { it: 'Durata evento fuori intervallo (1–365 giorni).', en: 'Event duration out of range (1–365 days).' },
   'pack.fabric.mode': { it: 'Modalità fabric non valida: filaments o field (weave è esclusa).', en: 'Invalid fabric mode: filaments or field (weave is excluded).' },
   'pack.fabric.opacity': { it: 'Opacità fuori intervallo (0–1).', en: 'Opacity out of range (0–1).' },
@@ -421,6 +434,7 @@ const ISSUE_MESSAGES: Record<string, Localized> = {
   'pack.fabric.band_minutes': { it: 'Banda temporale fuori intervallo (1–240 min).', en: 'Time band out of range (1–240 min).' },
   'pack.fabric.proximity': { it: 'Raggio di prossimità fuori intervallo (100–3000 m).', en: 'Proximity radius out of range (100–3000 m).' },
   'pack.fabric.palette.hex': { it: 'Colore non valido: {color} (usa #RRGGBB).', en: 'Invalid colour: {color} (use #RRGGBB).' },
+  'pack.fabric.palette.unsafe': { it: 'Colore {color} fuori dalle palette sicure: usa i preset (deuteranopia/protanopia, max 7).', en: 'Colour {color} is outside the safe palettes: use the presets (deuteranopia/protanopia, max 7).' },
   'pack.fabric.palette.min': { it: 'La palette richiede almeno {min} colori.', en: 'The palette needs at least {min} colours.' },
   'pack.fabric.palette.max': { it: 'La palette ammette al massimo {max} colori (niente arcobaleno).', en: 'The palette allows at most {max} colours (no rainbow).' },
   'pack.copy': { it: 'Testo del pack mancante in IT o EN.', en: 'Pack copy missing in IT or EN.' },

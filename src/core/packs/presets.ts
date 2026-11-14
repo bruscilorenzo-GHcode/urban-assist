@@ -30,6 +30,12 @@ export const PALETTE_PRESETS: FabricPalette[] = [
 export const MIN_PALETTE_COLORS = 2
 export const MAX_PALETTE_COLORS = 7
 
+/** Union of the preset colours: the only colours a pack may declare. This is
+ *  what makes "no rainbow" and colour-blind safety enforceable on import. */
+export const SAFE_PACK_COLORS = new Set(
+  PALETTE_PRESETS.flatMap((preset) => preset.colors.map((color) => color.toUpperCase())),
+)
+
 export function paletteByName(name: string): FabricPalette | null {
   return PALETTE_PRESETS.find((preset) => preset.name === name) ?? null
 }

@@ -51,13 +51,18 @@ describe('project packs · data, validation, export/import', () => {
   })
 
   it('rejects invalid packs with readable bilingual messages', () => {
-    const tooMany = withColors(['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#D55E00', '#000000', '#FFFFFF'])
+    const tooMany = withColors(['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#D55E00', '#000000', '#999999'])
     const rejected = parseProjectPack(tooMany)
     expect(rejected.ok).toBe(false)
     const issue = rejected.issues.find((entry) => entry.code === 'pack.fabric.palette.max')
     expect(issue).toBeTruthy()
     expect(describePackIssue(issue!, 'it')).toContain('massimo 7')
     expect(describePackIssue(issue!, 'en')).toContain('at most 7')
+
+    const unsafe = parseProjectPack(withColors(['#0072B2', '#FF00FF']))
+    expect(unsafe.ok).toBe(false)
+    expect(unsafe.issues.some((entry) => entry.code === 'pack.fabric.palette.unsafe')).toBe(true)
+    expect(describePackIssue(unsafe.issues[0]!, 'it')).toContain('palette sicure')
 
     const badCurve = parseProjectPack({ ...TESTVILLE_PACK, fabric: { ...TESTVILLE_PACK.fabric, curvature: 8 } })
     expect(badCurve.ok).toBe(false)
