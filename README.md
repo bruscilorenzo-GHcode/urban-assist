@@ -1,8 +1,16 @@
 # URBAN ASSIST — Assistive Urban Storytelling
 
-**Live:** https://urban-assist-982.netlify.app · branch `main` (feature work merged from
-`feat/emergent-state`: emergent map state, recurring-event calendar, additive fabric,
-project packs, `?pm=1` panel, server-side `/api/state`).
+**Reference version:** **v1.0.0** · `main` is always green (CI: tests + build).
+
+| Canonical links | |
+| :--- | :--- |
+| Live reference | https://urban-assist-982.netlify.app |
+| Repository | https://github.com/bruscilorenzo-GHcode/urban-assist |
+| Forking & upstream sync | `FORKING.md` |
+| Changelog / tags | `CHANGELOG.md` · `git tag -l` |
+
+Fork a **tag**, keep your work on a branch, rebase on `upstream/main`, and put
+territory customizations in **project packs / event data**, not in the core.
 
 A place-bound civic storytelling app. Citizens tell **multimedia stories** — text, photo,
 video, voice — anchored to a real place; the app turns them into **Dramaturgical Zones**
