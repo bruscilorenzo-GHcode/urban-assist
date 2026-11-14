@@ -103,6 +103,7 @@ describe('genericity · any city, any DZ, data only', () => {
         '../src/assist-urban/state-panel.tsx',
         '../src/assist-urban/state-client.ts',
         '../src/assist-urban/draft-store.ts',
+        '../src/assist-urban/story-cache.ts',
         '../src/assist-urban/project-panel.tsx',
         '../netlify/functions/state.ts',
         '../netlify/functions/packs.ts',

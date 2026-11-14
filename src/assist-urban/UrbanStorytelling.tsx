@@ -25,6 +25,7 @@ import StatePanel from './state-panel'
 import ProjectPanel from './project-panel'
 import { FabricOverlay, type FabricPick } from './fabric-overlay'
 import { cacheState, fetchState, loadCachedState, type StateBundle } from './state-client'
+import { cacheStories, isPublishedStory, loadCachedStories } from './story-cache'
 import { OfflineBanner, ReportPanel, VersionBadge } from './robustness-panel'
 import { installTelemetry, logTechnical, technicalContext, type TelemetryData } from './telemetry'
 import { parseUrlParams, serializeUrlParams } from '../core/state/url.js'
@@ -148,16 +149,6 @@ function browserStorage(): Storage | null {
   } catch {
     return null
   }
-}
-
-function isStory(value: unknown): value is PublishedStory {
-  if (!value || typeof value !== 'object') return false
-  const story = value as Partial<PublishedStory>
-  return typeof story.id === 'string'
-    && typeof story.text === 'string'
-    && typeof story.ts === 'string'
-    && (story.dz === null || typeof story.dz === 'string')
-    && Array.isArray(story.media)
 }
 
 function MediaThumb({ media, alt }: { media: PublishedStory['media'][number]; alt: string }) {
@@ -545,10 +536,11 @@ export default function UrbanStorytelling() {
     void (async () => {
       try {
         const res = await fetch(`/api/story?dz=${encodeURIComponent(zone.id)}`)
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const body = await res.json() as { stories?: unknown }
-        const remote = Array.isArray(body.stories) ? body.stories.filter(isStory) : []
+        const remote = Array.isArray(body.stories) ? body.stories.filter(isPublishedStory) : []
         if (cancelled) return
+        cacheStories(zone.id, remote, storage)
         setStories((prev) => {
           const remoteIds = new Set(remote.map((story) => story.id))
           const localZone = prev.filter((story) => story.dz === zone.id && !remoteIds.has(story.id))
@@ -556,11 +548,18 @@ export default function UrbanStorytelling() {
           return [...remote, ...localZone, ...others].slice(0, 144)
         })
       } catch {
-        // Static-only deploy or network hiccup: keep the local session.
+        // Offline: restore the last loaded wall of this DZ (text/media ids);
+        // media bytes follow the browser cache.
+        const cached = loadCachedStories(zone.id, storage)
+        if (!cached || cancelled) return
+        setStories((prev) => {
+          if (prev.some((story) => story.dz === zone.id)) return prev
+          return [...cached.stories, ...prev.filter((story) => story.dz !== zone.id)].slice(0, 144)
+        })
       }
     })()
     return () => { cancelled = true }
-  }, [zone.id])
+  }, [zone.id, storage])
 
   useEffect(() => {
     const layer = storyLayer.current
@@ -1133,6 +1132,7 @@ export default function UrbanStorytelling() {
         })
       }
       setStories((prev) => [story, ...prev].slice(0, 48))
+      cacheStories(zone.id, [story, ...zoneStories].slice(0, 48), storage)
       setSelected(story.id)
       setPendingMedia([])
       setText('')
@@ -1165,6 +1165,7 @@ export default function UrbanStorytelling() {
       const body = await res.json().catch(() => ({} as { error?: string }))
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
       setStories((prev) => prev.filter((candidate) => candidate.id !== story.id))
+      cacheStories(zone.id, zoneStories.filter((candidate) => candidate.id !== story.id), storage)
       setMyStories((prev) => {
         const next = { ...prev }
         delete next[story.id]

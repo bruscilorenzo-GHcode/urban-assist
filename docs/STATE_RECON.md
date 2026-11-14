@@ -180,7 +180,7 @@ DevTools; il codice aggiunto non introduce dipendenze e non duplica Leaflet.
 
 Misure aggiornate sullo stesso branch:
 
-- `npm test`: **81 test, 18 file**, tutti verdi (era 40/8).
+- `npm test`: **83 test, 19 file**, tutti verdi (era 40/8).
 - `npm run build`: JS **≈490,4 KB** → **≈149,4 KB gzip**; CSS **34,0 KB** → **10,1 KB gzip**.
   Nessuna dipendenza npm aggiunta: il fabric è canvas + Leaflet già presente; stato, pack e
   calendario sono codice puro e dati.
@@ -197,9 +197,11 @@ Misure aggiornate sullo stesso branch:
    condividono il pseudonimo finché il composer non invia un `note_id`. La relazione è
    presente nel modello ma resta `available: false` quando non ci sono pseudonimi
    ricorrenti: non viene inventata.
-2. **Offline**: lo stato dell'ultima DZ è in cache (localStorage) e le tile già caricate
-   restano nella cache HTTP del browser; **non** c'è un service worker. “Mappa già caricata”
-   è coperto, un avvio a freddo completamente offline no.
+2. **Offline**: lo stato **e il muro** dell'ultima DZ sono in cache (localStorage) e le
+   tile già caricate restano nella cache HTTP del browser; **non** c'è un service worker.
+   “Mappa già caricata” è coperto (pin, wall, fabric, spiegazione), un avvio a freddo
+   completamente offline no. Le palette dei pack sono limitate ai colori dei preset sicuri
+   (deuteranopia/protanopia, max 7), così “niente arcobaleno” è verificabile all'import.
 3. **Calendario**: le fonti sono quelle indicate nel brief (domini dichiarati) e
    `retrievedAt` è la data di composizione del dataset (2026-11-14); nessuna edizione 2026
    è stata verificata esternamente. Per questo nessun evento è `confirmed`: si usa
