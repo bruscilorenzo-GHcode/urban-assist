@@ -64,16 +64,29 @@ src/assist-urban/
   story.ts                           publish pipeline (pure, testable)
   cities.ts · geocode.ts             cities + Photon geocoding
   my-zones.ts · my-stories.ts        local ownership (edit/delete tokens)
-  media-upload.ts                    chunked upload (50 MB, 4 MB chunks)
+  media-upload.ts                    chunked, resumable upload (50 MB, 4 MB chunks)
+  draft-store.ts                     persistent draft + IndexedDB media queue
+  state-client.ts                    fetches the server-computed State, offline cache
+  state-panel.tsx                    theme/search/event controls, chips, explanation
+  fabric-overlay.ts                  additive canvas fabric (filaments / field)
+  project-panel.tsx                  PM pack panel (?pm=1): palette, export/import
+  robustness-panel.tsx · telemetry.ts · version.ts
   i18n.tsx                           IT/EN UI strings
+src/core/
+  state/            Query → State engine (relevance, fabric, templates, URL)
+  packs/            pack types, seeds, safe palettes, validation, derivation
+  calendar/         recurring templates + yearly instances (tbd-aware)
 netlify/functions/
   story.ts         GET/POST/DELETE  /api/story       (stories in Blobs, ≤48 per zone)
   zones.ts         GET/POST/DELETE  /api/zones       (pilot zones + edit tokens)
   cities.ts        GET/POST         /api/cities      (shared city records)
-  media-upload.ts  POST             /api/media-upload (chunked, Blobs)
+  state.ts         GET/POST         /api/state       (State computed server-side)
+  packs.ts         GET/POST         /api/packs       (seed + PM-saved packs)
+  telemetry.ts     POST             /api/telemetry   (allow-listed technical signals)
+  media-upload.ts  GET/POST         /api/media-upload (chunked, resumable, Blobs)
   media.ts         GET              /api/media        (opaque-id read)
   transcribe.mts   POST             /api/groq/transcribe (optional Whisper)
-tests/assist-urban-*.spec.ts         Vitest (unit + API handlers)
+tests/*.spec.ts                      Vitest (unit + API handlers + genericity)
 ```
 
 Privacy invariants enforced in code: consent before coordinates leave the browser; text
@@ -119,9 +132,15 @@ Static-only hosting (no functions) is not supported: publishing needs `/api/*`.
 ## 6 · Extending to a new city
 
 1. **Pilot route (no deploy)**: pilot mode → create city → create zone → publish stories.
+   The zone immediately gets a **derived project pack** (bbox/centre/zoom, default themes,
+   explicitly empty calendar) and therefore a working emergent state.
 2. **Curated route (in code)**: add the zone to `SEED_ZONES`, add presets in the local
    languages, run `npm test && npm run build`, deploy.
-3. Nothing else changes: the map, consent, pipeline, APIs and privacy guarantees are
+3. **Project pack route (data, no deploy)**: open `?pm=1`, export the derived/seed pack,
+   edit themes/events/copy/fabric in the JSON, import it back, save it shared. Territory
+   event templates travel inside the pack (`eventTemplates`), so a new city's calendar
+   needs no code either.
+4. Nothing else changes: the map, consent, pipeline, APIs and privacy guarantees are
    zone-agnostic. Inner areas are zones with `zoom` 15–17; whole cities use 12–13.
 
 ## 7 · Configuration knobs
@@ -137,11 +156,46 @@ Static-only hosting (no functions) is not supported: publishing needs `/api/*`.
 
 Vitest covers: story publication pipeline and PII/consent invariants, zone validation and
 merge rules (curated zones cannot be shadowed), city records, geocoding parsing, API
-handlers (story, zones, cities) with mocked Blobs, and IT/EN i18n key parity.
+handlers (story, zones, cities, state, packs, telemetry) with mocked Blobs, IT/EN i18n key
+parity, the emergent-state engine (non-destructive relevance, AND composition, URL
+round-trip, calendar rules and `tbd`, pack export/import) and the mandatory **genericity**
+suite: a third synthetic city (`testville`) must produce a full State, fabric and
+exportable/importable pack, and the test fails if Scicli/Beirut leak into generic paths.
 
 ```bash
 npm test
 ```
+
+## 9 · Emergent state, calendar, fabric
+
+- **State is computed server-side** (`/api/state`): the browser never scores relevance or
+  similarity. Without embeddings the engine uses a declared lexical + entity fallback
+  (captions/timelines included, audio transcriptions excluded).
+- **The corpus is not filtered out**: every story gets a weight and a band
+  (`foreground` / `context`); the base map and the wall remain complete.
+- **Recurring events** store a rule, a source, a confidence and a yearly instance; uncertain
+  editions stay `tbd` and the UI always asks to confirm with the organiser.
+- **The fabric** is additive (“wax on top”): canvas above the map, off by default, opacity
+  0–100 %, `filaments` or `field` (never `weave`), labels only on hover/zoom, reduced motion
+  respected, insufficiency declared with few stories.
+- **Project packs** define a territory and its reading (themes, events, fabric, copy,
+  defaults). `?pm=1` opens the PM panel: pack selection, safe palette presets, opacity,
+  curvature, thickness, halo, default theme, share URL, JSON export/import and a shared
+  save. Limits and readable validation prevent breaking the map; seed packs are read-only
+  and must be duplicated under a new id.
+- **Shareable URL**: `?theme=&q=&event=&from=&to=&dz=&pack=&pm=1` plus appearance
+  (`fab`, `fm`, `fo`, `pal`, `cur`, `th`, `hal`) and `year`; opening it rebuilds the same
+  State on the server.
+
+**Robustness**: draft and media queue persist (localStorage + IndexedDB), chunk uploads
+resume from the last received chunk, the last State per DZ is cached for offline
+consultation of the already-loaded map, the build version is visible, technical telemetry
+carries no story text, and “report a problem” attaches the technical context only.
+
+**Open decisions for the team**: which themes truly fit each territory; whether search
+should include audio transcriptions; whether national events belong in the calendar;
+who curates yearly instances; and whether PM overrides should be browser-local or
+server-persisted (both paths exist; `?pm=1` is a mode flag, not authentication).
 
 ---
 
