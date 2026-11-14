@@ -2,6 +2,11 @@
 
 All notable changes to the URBAN ASSIST reference. Tags mark fork baselines.
 
+## v1.0.1 — 2026-11-14
+
+- Restore the city/zone helpers (`cityNamesOf`, `zonesInCity`, `zoneCityKey`)
+  used by the city switcher and by the fork-parity tests.
+
 ## v1.0.0 — 2026-11-14
 
 **Emergent map state, recurring-event calendar, additive fabric, project packs.**

@@ -300,3 +300,27 @@ export function saveActiveZoneId(id: string, storage: WriteStorage | null | unde
     // ignore
   }
 }
+
+export function zoneCityKey(zone: DramaturgicalZone): string {
+  return zone.city.trim()
+}
+
+/** City names that contain at least one zone, sorted for the switcher. */
+export function cityNamesOf(zones: DramaturgicalZone[]): string[] {
+  const names = new Set<string>()
+  for (const zone of zones) {
+    const key = zoneCityKey(zone)
+    if (key) names.add(key)
+  }
+  return [...names].sort((a, b) => a.localeCompare(b))
+}
+
+/** The zones visible while `city` is active: its own zones only. Records with
+ *  no city (legacy) stay visible so they never disappear from the app. */
+export function zonesInCity(zones: DramaturgicalZone[], city: string): DramaturgicalZone[] {
+  const key = city.trim().toLowerCase()
+  return zones.filter((zone) => {
+    const own = zoneCityKey(zone).toLowerCase()
+    return own === '' || own === key
+  })
+}
