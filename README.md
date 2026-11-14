@@ -1,5 +1,9 @@
 # URBAN ASSIST — Assistive Urban Storytelling
 
+**Live:** https://urban-assist-982.netlify.app · branch `main` (feature work merged from
+`feat/emergent-state`: emergent map state, recurring-event calendar, additive fabric,
+project packs, `?pm=1` panel, server-side `/api/state`).
+
 A place-bound civic storytelling app. Citizens tell **multimedia stories** — text, photo,
 video, voice — anchored to a real place; the app turns them into **Dramaturgical Zones**
 campaigns and keeps the collection concentrated on one area at a time.
