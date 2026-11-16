@@ -622,3 +622,13 @@ html.urban-route .au-media-side h2 { font-size: 12px; }
     font-weight: 600;
   }
 }
+
+/* Experimental living canvas: roots and mycelium above the map. */
+.au-living-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 455;
+}
+.au-chip-living { border-style: dashed; }
+.au-chip-living.on { background: #3f7f4e; border-color: #3f7f4e; color: #fff; }

@@ -24,6 +24,7 @@ import type { City } from './cities'
 import StatePanel from './state-panel'
 import ProjectPanel from './project-panel'
 import { FabricOverlay, type FabricPick } from './fabric-overlay'
+import { LivingCanvas } from './living-canvas'
 import { cacheState, fetchState, loadCachedState, type StateBundle } from './state-client'
 import { cacheStories, isPublishedStory, loadCachedStories } from './story-cache'
 import { OfflineBanner, ReportPanel, VersionBadge } from './robustness-panel'
@@ -274,12 +275,14 @@ export default function UrbanStorytelling() {
   const [cachedAt, setCachedAt] = useState<string | null>(null)
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
   const [fabricConfig, setFabricConfig] = useState<FabricConfig>(() => defaultFabricConfig(false))
+  const [livingCanvas, setLivingCanvas] = useState(false)
   const [fabricPick, setFabricPick] = useState<FabricPick | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportContext, setReportContext] = useState<TelemetryData>({})
   const [draftNotice, setDraftNotice] = useState<string | null>(null)
   const [storyVersion, setStoryVersion] = useState(0)
   const overlayRef = useRef<FabricOverlay | null>(null)
+  const livingRef = useRef<LivingCanvas | null>(null)
   const appliedPackRef = useRef('')
   const appliedDefaultRef = useRef<Set<string>>(new Set())
   const draftZoneRef = useRef<string | null>(null)
@@ -624,18 +627,26 @@ export default function UrbanStorytelling() {
       logTechnical('fabric.pick', { kind: pick.kind, dz: zoneIdRef.current })
     })
     overlayRef.current = overlay
+    const living = new LivingCanvas(map)
+    livingRef.current = living
     return () => {
+      living.destroy()
+      livingRef.current = null
       overlay.destroy()
       overlayRef.current = null
     }
   }, [])
 
   useEffect(() => {
-    overlayRef.current?.setConfig(fabricConfig)
-  }, [fabricConfig])
+    // One visual at a time: the experimental living layer takes over the map
+    // when active, so roots and the standard filaments never fight.
+    overlayRef.current?.setConfig({ ...fabricConfig, enabled: fabricConfig.enabled && !livingCanvas })
+    livingRef.current?.setConfig({ ...fabricConfig, enabled: livingCanvas })
+  }, [fabricConfig, livingCanvas])
 
   useEffect(() => {
     overlayRef.current?.setState(bundle?.state ?? null)
+    livingRef.current?.setState(bundle?.state ?? null)
   }, [bundle])
 
   const queryKey = JSON.stringify(query)
@@ -1525,6 +1536,16 @@ export default function UrbanStorytelling() {
                 onClick={() => setFabricConfig((prev) => ({ ...prev, enabled: !prev.enabled }))}
               >
                 {t.fabricToggle}
+              </button>
+              <button
+                type="button"
+                className={`au-chip au-chip-living${livingCanvas ? ' on' : ''}`}
+                aria-pressed={livingCanvas}
+                data-testid="living-toggle"
+                title={t.livingCanvasFull}
+                onClick={() => setLivingCanvas((on) => !on)}
+              >
+                {t.livingCanvasChip}
               </button>
               {fabricConfig.enabled && (
                 <>
