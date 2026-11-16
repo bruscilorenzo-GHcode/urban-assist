@@ -1783,6 +1783,22 @@ export default function UrbanStorytelling() {
 
       {reportOpen && <ReportPanel t={t} context={reportContext} onClose={() => setReportOpen(false)} />}
 
+      {/* Mobile-first action: the primary publish stays reachable while telling. */}
+      <div className="au-mobile-publish" data-testid="mobile-publish">
+        <span className="au-media-label">{zone.label}</span>
+        <button
+          type="button"
+          className="au-submit"
+          disabled={busy}
+          onClick={() => {
+            document.getElementById('au-story')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            void publish()
+          }}
+        >
+          {busy ? (uploadPct !== null ? `${t.uploaded} ${uploadPct}%` : t.submitting) : t.submit}
+        </button>
+      </div>
+
       <footer className="au-foot">
         <span>{t.privacy}</span>
         <span>{t.footRight}</span>

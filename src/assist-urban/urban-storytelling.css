@@ -571,3 +571,54 @@ html.urban-route .au-media-side h2 { font-size: 12px; }
   html.urban-route .au-map-row.has-side { grid-template-columns: minmax(0, 1fr); }
   html.urban-route .au-head { padding: 12px; border-radius: 16px; }
 }
+
+/* ---------------------------------------------------------------------------
+   Mobile-first ordering: map → composer (publish) → filters → wall, plus a
+   fixed publish bar so the primary action is always one tap away.
+--------------------------------------------------------------------------- */
+.au-mobile-publish { display: none; }
+@media (max-width: 720px) {
+  .au { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  html.urban-route .au-grid > .au-col:first-child { display: flex; flex-direction: column; }
+  html.urban-route .au-grid > .au-col:first-child > .au-map-row { order: 1; }
+  html.urban-route .au-grid > .au-col:first-child > #au-story { order: 2; }
+  html.urban-route .au-grid > .au-col:first-child > #au-state { order: 3; }
+  html.urban-route .au-map { height: 260px; }
+  html.urban-route .au-head { padding: 10px 12px; }
+  html.urban-route .au-head h1 { font-size: 23px; line-height: 1.12; }
+  html.urban-route .au-head .au-lede { font-size: 14.5px; line-height: 1.5; }
+  .au-mobile-publish {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    z-index: 650;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, .16);
+    background: rgba(8, 12, 20, .92);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .42);
+    color: #e9e3d6;
+  }
+  .au-mobile-publish .au-media-label {
+    color: #cfc8ba;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .au-mobile-publish .au-submit {
+    width: auto;
+    margin: 0;
+    min-height: 42px;
+    border-radius: 10px;
+    background: #178f80;
+    color: #ffffff;
+    font-weight: 600;
+  }
+}
