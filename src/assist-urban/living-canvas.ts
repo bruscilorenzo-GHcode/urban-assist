@@ -106,6 +106,13 @@ interface Hover {
   y: number
 }
 
+export interface LivingHandlers {
+  /** A story nodule was tapped: open the story (media aside the map). */
+  onSelectStory: (storyId: string) => void
+  /** A tendril was tapped (or the map background): inspect / clear. */
+  onPick: (edge: FabricEdge | null) => void
+}
+
 const SAMPLES = 24
 
 export class LivingCanvas {
@@ -119,6 +126,8 @@ export class LivingCanvas {
   private destroyed = false
   private loop = 0
   private cache: Array<{ edge: FabricEdge, samples: Pt[] }> = []
+  private readonly handlers: LivingHandlers
+  private selected: { edge: FabricEdge, x: number, y: number } | null = null
 
   private readonly schedule = () => {
     if (this.destroyed) return
@@ -166,8 +175,54 @@ export class LivingCanvas {
     this.schedule()
   }
 
-  constructor(map: L.Map) {
+  private readonly onClick = (event: MouseEvent) => {
+    if (!this.config?.enabled) return
+    const target = event.target as Element | null
+    if (target?.closest('.leaflet-marker-icon, .leaflet-control')) return
+    const rect = this.canvas.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+    if (this.state) {
+      for (const node of this.state.fabric.nodes) {
+        if (!node.point) continue
+        const point = this.map.latLngToContainerPoint(node.point)
+        const radius = 6 + 6 * clamp01(node.weight)
+        if (Math.hypot(x - point.x, y - point.y) <= radius) {
+          event.preventDefault()
+          event.stopPropagation()
+          this.handlers.onSelectStory(node.storyId)
+          return
+        }
+      }
+    }
+    let found: { edge: FabricEdge, x: number, y: number } | null = null
+    let closest = 12
+    for (const entry of this.cache) {
+      const nearest = nearestOnSamples(entry.samples, x, y)
+      const tolerance = 6 + filamentWidth(entry.edge.weight) * 2
+      if (nearest.distance <= Math.min(tolerance, closest)) {
+        closest = nearest.distance
+        found = { edge: entry.edge, x, y }
+      }
+    }
+    if (found) {
+      event.preventDefault()
+      event.stopPropagation()
+      this.selected = found
+      this.handlers.onPick(found.edge)
+      this.schedule()
+      return
+    }
+    if (this.selected) {
+      this.selected = null
+      this.handlers.onPick(null)
+      this.schedule()
+    }
+  }
+
+  constructor(map: L.Map, handlers: LivingHandlers) {
     this.map = map
+    this.handlers = handlers
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'au-living-canvas'
     this.canvas.setAttribute('aria-hidden', 'true')
@@ -176,6 +231,7 @@ export class LivingCanvas {
     map.on('move zoom zoomend viewreset resize', this.schedule)
     map.on('mousemove', this.onMove)
     map.on('mouseout', this.onLeave)
+    map.getContainer().addEventListener('click', this.onClick, true)
     this.schedule()
   }
 
@@ -202,6 +258,7 @@ export class LivingCanvas {
     this.map.off('move zoom zoomend viewreset resize', this.schedule)
     this.map.off('mousemove', this.onMove)
     this.map.off('mouseout', this.onLeave)
+    this.map.getContainer().removeEventListener('click', this.onClick, true)
     this.canvas.remove()
   }
 
@@ -244,8 +301,10 @@ export class LivingCanvas {
       const color = colorFor(edge.type)
       const context = edge.band === 'context'
       const weight = clamp01(edge.weight)
-      const alpha = config.opacity * (context ? 0.20 : 0.82) * (0.32 + 0.68 * weight)
-      const width = filamentWidth(weight, 6 * Math.max(0.4, config.thickness))
+      const selected = this.selected?.edge.id === edge.id
+      const dimmed = this.selected !== null && !selected
+      const alpha = config.opacity * (context ? 0.20 : 0.82) * (0.32 + 0.68 * weight) * (dimmed ? 0.22 : 1)
+      const width = filamentWidth(weight, 6 * Math.max(0.4, config.thickness)) + (selected ? 2 : 0)
 
       // Direction of the sap: older story → newer story when timestamps exist.
       const tFrom = timeOf.get(edge.from) ?? ''

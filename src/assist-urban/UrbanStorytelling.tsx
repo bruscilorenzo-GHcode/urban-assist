@@ -25,6 +25,7 @@ import type { City } from './cities'
 import StatePanel from './state-panel'
 import ProjectPanel from './project-panel'
 import { FabricOverlay, type FabricPick } from './fabric-overlay'
+import type { FabricEdge } from '../core/state/types.js'
 import { LivingCanvas } from './living-canvas'
 import { cacheState, fetchState, loadCachedState, type StateBundle } from './state-client'
 import { cacheStories, isPublishedStory, loadCachedStories } from './story-cache'
@@ -276,6 +277,7 @@ export default function UrbanStorytelling() {
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
   const [fabricConfig, setFabricConfig] = useState<FabricConfig>(() => defaultFabricConfig(false))
   const [livingCanvas, setLivingCanvas] = useState(false)
+  const [livingPick, setLivingPick] = useState<FabricEdge | null>(null)
   const [fabricPick, setFabricPick] = useState<FabricPick | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportContext, setReportContext] = useState<TelemetryData>({})
@@ -348,8 +350,6 @@ export default function UrbanStorytelling() {
     if (first) switchZone(first.id)
     else { setEditorOpen(false); setCityEditorOpen(false); setZoneError(null) }
   }, [zones, switchZone])
-  const livingAvailable = import.meta.env.DEV
-    || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('exp'))
 
   const locationErrorMessage = useCallback((error: GeolocationPositionError) => {
     if (error.code === error.PERMISSION_DENIED) return t.locationDenied
@@ -650,7 +650,10 @@ export default function UrbanStorytelling() {
       logTechnical('fabric.pick', { kind: pick.kind, dz: zoneIdRef.current })
     })
     overlayRef.current = overlay
-    const living = new LivingCanvas(map)
+    const living = new LivingCanvas(map, {
+      onSelectStory: (storyId) => setSelected(storyId),
+      onPick: (edge) => setLivingPick(edge),
+    })
     livingRef.current = living
     return () => {
       living.destroy()
@@ -1572,17 +1575,28 @@ export default function UrbanStorytelling() {
               >
                 {t.fabricToggle}
               </button>
-              {livingAvailable && (
-                <button
-                  type="button"
-                  className={`au-chip au-chip-living${livingCanvas ? ' on' : ''}`}
-                  aria-pressed={livingCanvas}
-                  data-testid="living-toggle"
-                  title={t.livingCanvasFull}
-                  onClick={() => setLivingCanvas((on) => !on)}
-                >
-                  {t.livingCanvasChip}
-                </button>
+              <button
+                type="button"
+                className={`au-chip au-chip-living${livingCanvas ? ' on' : ''}`}
+                aria-pressed={livingCanvas}
+                data-testid="living-toggle"
+                title={t.livingCanvasFull}
+                onClick={() => setLivingCanvas((on) => {
+                  const next = !on
+                  if (!next) setLivingPick(null)
+                  return next
+                })}
+              >
+                {t.livingCanvasChip}
+              </button>
+              {(fabricConfig.enabled || livingCanvas) && (
+                <label>{t.fabricOpacity} · {Math.round(fabricConfig.opacity * 100)}%
+                  <input
+                    type="range" min={0} max={100} step={1}
+                    value={Math.round(fabricConfig.opacity * 100)}
+                    onChange={(event) => setFabricConfig((prev) => ({ ...prev, opacity: Number(event.target.value) / 100 }))}
+                  />
+                </label>
               )}
               {fabricConfig.enabled && (
                 <>
@@ -1604,6 +1618,13 @@ export default function UrbanStorytelling() {
                   </label>
                   {fabricConfig.reducedMotion && <span className="au-hint">{t.fabricReducedMotion}</span>}
                 </>
+              )}
+              {livingCanvas && livingPick && (
+                <div className="au-living-pick" data-testid="living-pick">
+                  <span className="au-media-label">{livingPick.type} · {Math.round(livingPick.weight * 100)}%</span>
+                  <p>{livingPick.explanation}</p>
+                  <button type="button" className="au-chip" onClick={() => setLivingPick(null)}>{t.cancel}</button>
+                </div>
               )}
             </div>
 
