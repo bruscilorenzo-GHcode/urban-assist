@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { zonesInCity } from './pipeline/dramaturgical-zones'
 import {
   loadActiveZoneId,
   loadPilotMode,
@@ -222,7 +223,6 @@ export default function UrbanStorytelling() {
   const zone = zoneById(zones, zoneId)
   const zoneIdRef = useRef(zoneId)
   zoneIdRef.current = zoneId
-
   const [pilotMode, setPilotMode] = useState(() => loadPilotMode(storage))
   const [editorOpen, setEditorOpen] = useState(false)
   const [draft, setDraft] = useState<PilotZoneInput>(EMPTY_DRAFT)
@@ -327,6 +327,29 @@ export default function UrbanStorytelling() {
     setPackId(undefined)
     setFabricPick(null)
   }, [focusZone, zones])
+
+  // DZs belong to a city: the switcher is two-level (city → zones of that city).
+  const [cityFilter, setCityFilter] = useState<string>(() => zone.city.trim())
+  useEffect(() => { setCityFilter(zone.city.trim()) }, [zone.id, zone.city])
+  const activeCity = cityFilter || zone.city.trim()
+  const zonesOfCity = useMemo(() => {
+    const list = zonesInCity(zones, activeCity)
+    return list.length > 0 ? list : (activeCity ? [] : zones)
+  }, [zones, activeCity])
+  const visibleCities = useMemo(() => {
+    const names = new Set<string>(cityOptions)
+    if (zone.city.trim()) names.add(zone.city.trim())
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }, [cityOptions, zone.city])
+  const switchCity = useCallback((city: string) => {
+    const inCity = zones.filter((candidate) => candidate.city.trim().toLowerCase() === city.toLowerCase())
+    const first = inCity.find((candidate) => candidate.status !== 'coming') ?? inCity[0]
+    setCityFilter(city)
+    if (first) switchZone(first.id)
+    else { setEditorOpen(false); setCityEditorOpen(false); setZoneError(null) }
+  }, [zones, switchZone])
+  const livingAvailable = import.meta.env.DEV
+    || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('exp'))
 
   const locationErrorMessage = useCallback((error: GeolocationPositionError) => {
     if (error.code === error.PERMISSION_DENIED) return t.locationDenied
@@ -1227,17 +1250,17 @@ export default function UrbanStorytelling() {
   // stay visible so they can be repaired.
   const zonesByCity = useMemo(() => {
     const groups = new Map<string, DramaturgicalZone[]>()
-    const activeCity = zone.city.trim()
+    const activeCityKey = (cityFilter || zone.city).trim()
     for (const candidate of pilotZones) {
       const candidateCity = candidate.city.trim()
-      if (activeCity && candidateCity && candidateCity.toLowerCase() !== activeCity.toLowerCase()) continue
+      if (activeCityKey && candidateCity && candidateCity.toLowerCase() !== activeCityKey.toLowerCase()) continue
       const key = candidateCity || candidate.name.trim()
       const list = groups.get(key) ?? []
       list.push(candidate)
       groups.set(key, list)
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [pilotZones, zone.city])
+  }, [pilotZones, cityFilter, zone.city])
 
   const selectedStory = zoneStories.find((story) => story.id === selected) ?? null
   const draftError = zoneError
@@ -1282,9 +1305,21 @@ export default function UrbanStorytelling() {
         </div>
         <h1>{t.title}</h1>
         <p className="au-lede">{t.subtitle}</p>
+        <div className="au-modes au-cities">
+          <span className="au-media-label">{t.cityChipLabel}</span>
+          {visibleCities.map((city) => (
+            <button key={city}
+              data-testid="city-chip"
+              className={`au-chip${activeCity === city ? ' on' : ''}`}
+              onClick={() => switchCity(city)}>
+              {city}
+            </button>
+          ))}
+        </div>
         <div className="au-modes">
           <span className="au-media-label">{t.zoneLabel}</span>
-          {zones.map((candidate) => {
+          {zonesOfCity.length === 0 && <span className="au-hint">{t.noZonesInCity}</span>}
+          {zonesOfCity.map((candidate) => {
             const coming = candidate.status === 'coming'
             const origin = candidate.origin === 'pilot' ? t.pilotZone : t.curatedZone
             return (
@@ -1334,7 +1369,7 @@ export default function UrbanStorytelling() {
                   setEditorOpen((open) => {
                     const next = !open
                     // NEW DZ always refers to the last selected city.
-                    if (next) setDraft((prev) => ({ ...prev, city: zone.city }))
+                    if (next) setDraft((prev) => ({ ...prev, city: activeCity || zone.city }))
                     return next
                   })
                 }
@@ -1537,16 +1572,18 @@ export default function UrbanStorytelling() {
               >
                 {t.fabricToggle}
               </button>
-              <button
-                type="button"
-                className={`au-chip au-chip-living${livingCanvas ? ' on' : ''}`}
-                aria-pressed={livingCanvas}
-                data-testid="living-toggle"
-                title={t.livingCanvasFull}
-                onClick={() => setLivingCanvas((on) => !on)}
-              >
-                {t.livingCanvasChip}
-              </button>
+              {livingAvailable && (
+                <button
+                  type="button"
+                  className={`au-chip au-chip-living${livingCanvas ? ' on' : ''}`}
+                  aria-pressed={livingCanvas}
+                  data-testid="living-toggle"
+                  title={t.livingCanvasFull}
+                  onClick={() => setLivingCanvas((on) => !on)}
+                >
+                  {t.livingCanvasChip}
+                </button>
+              )}
               {fabricConfig.enabled && (
                 <>
                   <label>{t.fabricMode}
