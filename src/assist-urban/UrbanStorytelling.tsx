@@ -1211,16 +1211,22 @@ export default function UrbanStorytelling() {
     </button>
   ) : null
 
+  // Pilot management is scoped to the active city: while working in one city
+  // you never see (or edit) another city's zones. Legacy zones without a city
+  // stay visible so they can be repaired.
   const zonesByCity = useMemo(() => {
     const groups = new Map<string, DramaturgicalZone[]>()
+    const activeCity = zone.city.trim()
     for (const candidate of pilotZones) {
-      const key = candidate.city.trim() || candidate.name.trim()
+      const candidateCity = candidate.city.trim()
+      if (activeCity && candidateCity && candidateCity.toLowerCase() !== activeCity.toLowerCase()) continue
+      const key = candidateCity || candidate.name.trim()
       const list = groups.get(key) ?? []
       list.push(candidate)
       groups.set(key, list)
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [pilotZones])
+  }, [pilotZones, zone.city])
 
   const selectedStory = zoneStories.find((story) => story.id === selected) ?? null
   const draftError = zoneError
