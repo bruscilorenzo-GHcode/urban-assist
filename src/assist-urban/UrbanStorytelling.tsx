@@ -159,6 +159,25 @@ function MediaThumb({ media, alt }: { media: PublishedStory['media'][number]; al
   return <a className="au-wall-id" href={src} target="_blank" rel="noreferrer">text ↗</a>
 }
 
+
+const MEDIA_SYMBOLS: Record<string, string> = {
+  image: '<circle cx="12" cy="12" r="3.6"/><path d="M12 3.5v2.4M12 18.1v2.4M3.5 12h2.4M18.1 12h2.4M6 6l1.7 1.7M16.3 16.3L18 18M18 6l-1.7 1.7M7.7 16.3L6 18"/>',
+  video: '<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M10 9.2l5.2 2.8-5.2 2.8z"/>',
+  audio: '<path d="M4 12h.01M7 9.2v5.6M10 6.4v11.2M13 8v8M16 10.2v3.6M19 12h.01"/>',
+  text: '<path d="M6.5 4.5h11v15h-11z"/><path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3"/>',
+  mixed: '<rect x="4.5" y="7" width="12" height="12" rx="2"/><path d="M8 7V4.5h11.5V16"/>',
+}
+
+function storyIcon(kind: string, color: string): L.DivIcon {
+  const symbol = MEDIA_SYMBOLS[kind] ?? MEDIA_SYMBOLS.text
+  return L.divIcon({
+    className: 'au-story-icon',
+    html: `<span class="au-story-icon-badge" style="--pin:${color}"><svg viewBox="0 0 24 24" aria-hidden="true">${symbol}</svg></span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  })
+}
+
 function storyPoint(story: PublishedStory, fallback: [number, number]): [number, number] {
   if (!story.geo || !story.geo.index.startsWith('gr_')) return fallback
   const parts = story.geo.index.split('_')
@@ -566,11 +585,12 @@ export default function UrbanStorytelling() {
     if (!layer) return
     layer.clearLayers()
     for (const story of zoneStories) {
-      const color = ARC_COLORS[story.media[0]?.kind ?? 'text'] ?? '#e66c52'
-      L.circleMarker(storyPoint(story, zone.center), {
-        radius: 8 + Math.min(story.media.length, 4),
-        color: '#ffffff', weight: 2, fillColor: color, fillOpacity: 0.85,
-      }).addTo(layer).on('click', () => setSelected(story.id))
+      const kinds = new Set(story.media.map((entry) => entry.kind))
+      const kind = kinds.size > 1 ? 'mixed' : (story.media[0]?.kind ?? 'text')
+      const color = ARC_COLORS[kind] ?? ARC_COLORS[story.media[0]?.kind ?? 'text'] ?? '#e66c52'
+      L.marker(storyPoint(story, zone.center), { icon: storyIcon(kind, color), title: kind })
+        .addTo(layer)
+        .on('click', () => setSelected(story.id))
     }
   }, [zoneStories, zone.center])
 
@@ -1272,24 +1292,6 @@ export default function UrbanStorytelling() {
           {pilotMode && (
             <button
               className="au-chip au-chip-add"
-              data-testid="new-dz"
-              onClick={() => {
-                if (editingZoneId) {
-                  setEditingZoneId(null)
-                  setDraft(EMPTY_DRAFT)
-                  setZoneError(null)
-                  setEditorOpen(true)
-                } else {
-                  setEditorOpen((open) => !open)
-                }
-              }}
-            >
-              {t.newZone}
-            </button>
-          )}
-          {pilotMode && (
-            <button
-              className="au-chip au-chip-add"
               data-testid="new-city"
               onClick={() => {
                 setCityEditorOpen((open) => !open)
@@ -1300,6 +1302,30 @@ export default function UrbanStorytelling() {
               {t.newCity}
             </button>
           )}
+          {pilotMode && (
+            <button
+              className="au-chip au-chip-add"
+              data-testid="new-dz"
+              onClick={() => {
+                setCityEditorOpen(false)
+                if (editingZoneId) {
+                  setEditingZoneId(null)
+                  setDraft(EMPTY_DRAFT)
+                  setZoneError(null)
+                  setEditorOpen(true)
+                } else {
+                  setEditorOpen((open) => {
+                    const next = !open
+                    // NEW DZ always refers to the last selected city.
+                    if (next) setDraft((prev) => ({ ...prev, city: zone.city }))
+                    return next
+                  })
+                }
+              }}
+            >
+              {t.newZone}
+            </button>
+          )}
         </div>
         <p className="au-hint">{zone.focus[ui]}</p>
         {pilotMode && <p className="au-hint au-pilot-hint">{t.pilotHint}</p>}
@@ -1307,7 +1333,7 @@ export default function UrbanStorytelling() {
 
       {!online && <OfflineBanner t={t} cachedAt={cachedAt} />}
 
-      {pilotMode && pilotZones.length > 0 && (
+      {pilotMode && !cityEditorOpen && pilotZones.length > 0 && (
         <section className="au-zone-manage" data-testid="dz-manage">
           <div className="au-zone-manage-head">
             <span className="au-media-label">{t.manageZones}</span>
@@ -1455,23 +1481,6 @@ export default function UrbanStorytelling() {
 
       <section className="au-grid">
         <div className="au-col">
-          <div className="au-card" id="au-state">
-            <StatePanel
-              ui={ui}
-              t={t}
-              pack={bundle?.pack ?? null}
-              calendar={bundle?.calendar ?? null}
-              state={bundle?.state ?? null}
-              loading={stateLoading}
-              error={stateError}
-              query={query}
-              year={year}
-              onQuery={setQuery}
-              onYear={setYear}
-              onSelectStory={setSelected}
-            />
-          </div>
-
           <div className="au-card" id="au-map">
             <h2>{t.mapTitle}</h2>
             <div ref={mapDiv} className="au-map" />
@@ -1686,6 +1695,23 @@ export default function UrbanStorytelling() {
         </div>
 
         <div className="au-col">
+          <div className="au-card" id="au-state">
+            <StatePanel
+              ui={ui}
+              t={t}
+              pack={bundle?.pack ?? null}
+              calendar={bundle?.calendar ?? null}
+              state={bundle?.state ?? null}
+              loading={stateLoading}
+              error={stateError}
+              query={query}
+              year={year}
+              onQuery={setQuery}
+              onYear={setYear}
+              onSelectStory={setSelected}
+            />
+          </div>
+
           <div className="au-card" id="au-wall">
             <h2>{t.wallTitle} ({zoneStories.length})</h2>
             {zoneStories.length === 0 && <p className="au-hint">{t.wallEmpty}</p>}

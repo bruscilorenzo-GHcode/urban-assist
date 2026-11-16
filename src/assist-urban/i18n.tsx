@@ -7,8 +7,8 @@ const STRINGS = {
   it: {
     brand: 'MUSI—CO · ASSISTIVE URBAN STORYTELLING',
     brandName: '— The RelationalBeing',
-    title: 'Le strade della città, ricche di storie',
-    subtitle: 'Una storia multimediale, ancorata alla mappa. Testo, audio, video, immagini — fino a 50 MB. Consenso esplicito, PII sanificate, geolocalizzazione anonima a griglia o nessuna. Ogni storia vive dentro una Dramaturgical Zone.',
+    title: 'Dove le storie fanno città',
+    subtitle: 'Ogni storia è una relazione: tra chi racconta, il luogo che la ospita e chi la ascolta. La mappa non mostra dati — mostra legami. È intelligenza drammaturgica applicata alla città, la nuova frontiera dell\'human–AI interaction: un co-learning factor — come lo chiama Lorenzo Brusci — in cui il modello impara dai racconti e i racconti imparano a farsi misura. Testo, audio, video, immagini — fino a 50 MB. Consenso esplicito, PII sanificate, geolocalizzazione anonima.',
     zoneLabel: 'Dramaturgical Zone',
     pilotMode: 'modalità pilota',
     pilotOn: 'pilota attivo',
@@ -221,8 +221,8 @@ const STRINGS = {
   en: {
     brand: 'MUSI—CO · ASSISTIVE URBAN STORYTELLING',
     brandName: '— The RelationalBeing',
-    title: 'The city streets, rich with stories',
-    subtitle: 'A multimedia story anchored to the map. Text, audio, video, images — up to 50 MB. Explicit consent, PII scrubbed, anonymous grid geolocation or none. Every story lives inside a Dramaturgical Zone.',
+    title: 'Where stories make the city',
+    subtitle: 'Every story is a relation: between who tells it, the place that hosts it, and who listens. The map does not show data — it shows bonds. Dramaturgical intelligence applied to the city, the new frontier of human–AI interaction: a co-learning factor — as Lorenzo Brusci calls it — where the model learns from stories and stories learn to become measurement. Text, audio, video, images — up to 50 MB. Explicit consent, PII scrubbed, anonymous geolocation.',
     zoneLabel: 'Dramaturgical Zone',
     pilotMode: 'pilot mode',
     pilotOn: 'pilot active',
