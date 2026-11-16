@@ -420,3 +420,90 @@ html.urban-route {
   width: 19px; height: 19px; fill: none; stroke: #fbfaf6;
   stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
 }
+
+/* ---------------------------------------------------------------------------
+   Urban night backdrop (Nov 2026)
+   A deeper, material ground: blurred city-block grid and soft duotone glows
+   behind floating paper cards. Legible across generations — high contrast,
+   no animation, calm but contemporary.
+--------------------------------------------------------------------------- */
+html.urban-route {
+  --surface: #f7f2e6;
+  --ink: #191b1a;
+  --muted: #5f5b53;
+  --line: #d6cfbf;
+  --accent: #178f80;
+  background: #111516;
+}
+
+html.urban-route body {
+  background-color: #111516;
+  background-image: none;
+  color: #eee9de;
+}
+
+/* Blurred urbanity: block grid + street diagonals + duotone glows. */
+html.urban-route body::before {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(55% 45% at 18% 12%, rgba(23, 143, 128, .55), transparent 62%),
+    radial-gradient(45% 40% at 88% 16%, rgba(230, 108, 82, .34), transparent 62%),
+    radial-gradient(50% 45% at 62% 94%, rgba(214, 169, 80, .20), transparent 64%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .055) 0 1px, transparent 1px 52px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .055) 0 1px, transparent 1px 52px),
+    linear-gradient(118deg, transparent 46.6%, rgba(255, 255, 255, .07) 46.8%, transparent 47.2%),
+    linear-gradient(62deg, transparent 63.6%, rgba(255, 255, 255, .05) 63.8%, transparent 64.2%);
+  filter: blur(26px) saturate(1.05);
+  transform: scale(1.06);
+}
+
+/* Fine grain on top of the ground (material, not noise). */
+html.urban-route body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: .07;
+  mix-blend-mode: overlay;
+}
+
+/* Header sits on the night ground: light type, glass chips. */
+html.urban-route .au-head h1 { color: #f6f1e6; letter-spacing: -0.015em; }
+html.urban-route .au-head .au-lede { color: #d9d2c4; }
+html.urban-route .au-head .au-brand { color: #8fe0d0; }
+html.urban-route .au-head .au-brand-sub,
+html.urban-route .au-head .au-flags,
+html.urban-route .au-head .au-media-label,
+html.urban-route .au-head .au-hint { color: #b9b2a4; }
+html.urban-route .au-head .au-chip {
+  background: rgba(18, 22, 23, .55);
+  border-color: rgba(255, 255, 255, .22);
+  color: #efe9dc;
+  backdrop-filter: blur(6px);
+}
+html.urban-route .au-head .au-chip.on { background: #178f80; border-color: #178f80; color: #fff; }
+html.urban-route .au-head .au-chip.pilot.on { background: #8a6a2f; border-color: #8a6a2f; color: #fff; }
+html.urban-route .au-head .au-chip.coming { opacity: .7; }
+html.urban-route .au-langswitch { border-color: rgba(255, 255, 255, .24); }
+html.urban-route .au-head .au-langswitch button { color: #d9d2c4; }
+html.urban-route .au-head .au-langswitch button.on { background: #178f80; color: #fff; }
+html.urban-route .au-suite-link { color: #cfe3df; border-color: rgba(255, 255, 255, .25); }
+
+/* Floating paper cards: the material layer above the ground. */
+html.urban-route .au-card,
+html.urban-route .au-zone-manage {
+  color: var(--ink);
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .30);
+}
+html.urban-route .au-zone-manage { background: var(--surface); border-color: rgba(138, 106, 47, .55); }
+
+/* Footer lives on the ground. */
+html.urban-route .au-foot { color: #a9a294; }
+html.urban-route .au-foot a { color: #cfe3df; }
