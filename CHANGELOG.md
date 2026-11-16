@@ -2,6 +2,23 @@
 
 All notable changes to the URBAN ASSIST reference. Tags mark fork baselines.
 
+## v1.1.0 — 2026-11-16
+
+**Map-first layout and the urban identity.**
+
+- Map at the top-left, right below the intro; state/filters moved to the right.
+- Poetic intro (IT/EN) on the relational power of stories and dramaturgical
+  intelligence — the human–AI *co-learning factor* (Lorenzo Brusci).
+- Type: **Archivo** (urban signage grotesque) for the interface, Newsreader for
+  the narratives; light paper grain.
+- Urban night ground: deeper backdrop with a blurred city-block grid, duotone
+  glows and fine grain; floating paper cards, light header.
+- Symbolic story icons: the marker encodes the shared media (image, video,
+  audio, text, mixed).
+- Pilot mode: **NEW CITY first**, then **NEW DZ** (prefilled with the last
+  selected city); zone management scoped to the active city — no other city's
+  zones while you work in one.
+
 ## v1.0.1 — 2026-11-14
 
 - Restore the city/zone helpers (`cityNamesOf`, `zonesInCity`, `zoneCityKey`)
