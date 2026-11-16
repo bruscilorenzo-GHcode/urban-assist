@@ -1487,6 +1487,32 @@ export default function UrbanStorytelling() {
 
       <section className="au-grid">
         <div className="au-col">
+          <div className={`au-map-row${selectedStory ? ' has-side' : ''}`}>
+            {selectedStory && (
+              <aside className="au-card au-media-side" data-testid="story-media-side">
+                <h2>{selectedStory.id}</h2>
+                {selectedStory.media.length > 0 && (
+                  <div className={`au-wall-media${selectedStory.comparative ? ' comparative' : ''}`}>
+                    {selectedStory.media.map((m) => (
+                      <figure key={m.id} className="au-media-card">
+                        {(m.timeline || m.caption) && (
+                          <figcaption>
+                            {m.timeline && <b>{m.timeline}</b>}
+                            {m.caption && <small>{m.caption}</small>}
+                          </figcaption>
+                        )}
+                        <MediaThumb media={m} alt="story media" />
+                      </figure>
+                    ))}
+                  </div>
+                )}
+                <p className="au-wall-text">{selectedStory.text}</p>
+                {selectedStory.comparative && <span className="au-compare-badge">{t.comparative}</span>}
+                <p className="au-meta">{selectedStory.geo ? selectedStory.geo.index : t.noGeo} · {t.anonymous}: {selectedStory.author_pseudonym}</p>
+                <p className="au-hint">{t.privacy}</p>
+                {deleteButton(selectedStory)}
+              </aside>
+            )}
           <div className="au-card" id="au-map">
             <h2>{t.mapTitle}</h2>
             <div ref={mapDiv} className="au-map" />
@@ -1600,6 +1626,24 @@ export default function UrbanStorytelling() {
             <p className="au-hint">{t.mapHint}</p>
           </div>
 
+          </div>
+          <div className="au-card" id="au-state">
+            <StatePanel
+              ui={ui}
+              t={t}
+              pack={bundle?.pack ?? null}
+              calendar={bundle?.calendar ?? null}
+              state={bundle?.state ?? null}
+              loading={stateLoading}
+              error={stateError}
+              query={query}
+              year={year}
+              onQuery={setQuery}
+              onYear={setYear}
+              onSelectStory={setSelected}
+            />
+          </div>
+
           <div className="au-card" id="au-story">
             <h2>{t.storyTitle}</h2>
             <div className="au-presets">
@@ -1701,23 +1745,6 @@ export default function UrbanStorytelling() {
         </div>
 
         <div className="au-col">
-          <div className="au-card" id="au-state">
-            <StatePanel
-              ui={ui}
-              t={t}
-              pack={bundle?.pack ?? null}
-              calendar={bundle?.calendar ?? null}
-              state={bundle?.state ?? null}
-              loading={stateLoading}
-              error={stateError}
-              query={query}
-              year={year}
-              onQuery={setQuery}
-              onYear={setYear}
-              onSelectStory={setSelected}
-            />
-          </div>
-
           <div className="au-card" id="au-wall">
             <h2>{t.wallTitle} ({zoneStories.length})</h2>
             {zoneStories.length === 0 && <p className="au-hint">{t.wallEmpty}</p>}
@@ -1750,31 +1777,7 @@ export default function UrbanStorytelling() {
             </ul>
           </div>
 
-          {selectedStory && (
-            <div className="au-card">
-              <h2>{t.wallTitle} · {selectedStory.id}</h2>
-              <p className="au-wall-text">{selectedStory.text}</p>
-              {selectedStory.comparative && <span className="au-compare-badge">{t.comparative}</span>}
-              {selectedStory.media.length > 0 && (
-                <div className={`au-wall-media${selectedStory.comparative ? ' comparative' : ''}`}>
-                  {selectedStory.media.map((m) => (
-                    <figure key={m.id} className="au-media-card">
-                      {(m.timeline || m.caption) && (
-                        <figcaption>
-                          {m.timeline && <b>{m.timeline}</b>}
-                          {m.caption && <small>{m.caption}</small>}
-                        </figcaption>
-                      )}
-                      <MediaThumb media={m} alt="story media" />
-                    </figure>
-                  ))}
-                </div>
-              )}
-              <p className="au-meta">{selectedStory.geo ? selectedStory.geo.index : t.noGeo} · {t.anonymous}: {selectedStory.author_pseudonym}</p>
-              <p className="au-hint">{t.privacy}</p>
-              {deleteButton(selectedStory)}
-            </div>
-          )}
+
         </div>
       </section>
 
