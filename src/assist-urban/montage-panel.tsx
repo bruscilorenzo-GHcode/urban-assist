@@ -65,6 +65,7 @@ export default function MontagePanel({ t, ui, items, themes, cell, onApply, rend
   const [renderError, setRenderError] = useState<string | null>(null)
   const [renderResult, setRenderResult] = useState<RenderResult | null>(null)
   const [renderUrl, setRenderUrl] = useState<string | null>(null)
+  const cancelRender = useRef(false)
 
   useEffect(() => {
     if (!renderResult) { setRenderUrl(null); return }
@@ -221,12 +222,14 @@ export default function MontagePanel({ t, ui, items, themes, cell, onApply, rend
                       setRenderResult(null)
                       setRenderProgress(0)
                       setRendering(true)
+                      cancelRender.current = false
                       try {
                         const files = new Map(items.map((item) => [item.key, item.file]))
                         const music = items.find((item) => item.kind === 'audio')?.file ?? null
                         const result = await renderMontage({
                           plan, files, music,
                           style: renderStyle, grade: renderGradeId, format: renderFormat,
+                          isCancelled: () => cancelRender.current,
                           onProgress: (_phase, value) => setRenderProgress(value),
                         })
                         setRenderResult(result)
@@ -240,6 +243,11 @@ export default function MontagePanel({ t, ui, items, themes, cell, onApply, rend
                         setRendering(false)
                       }
                     }}>{rendering ? `${t.montageRenderRendering} ${Math.round(renderProgress * 100)}%` : t.montageRenderStart}</button>
+                    {rendering && (
+                      <button type="button" className="au-chip" onClick={() => { cancelRender.current = true }}>
+                        {t.montageRenderCancel}
+                      </button>
+                    )}
                   </div>
                   {renderError && <p className="au-error">{renderError}</p>}
                   {renderResult && (
