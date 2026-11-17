@@ -376,6 +376,9 @@ export default function UrbanStorytelling() {
     const list = zonesInCity(zones, activeCity)
     return list.length > 0 ? list : (activeCity ? [] : zones)
   }, [zones, activeCity])
+  // A city without zones has NO active DZ: the previous city's DZ content must
+  // not leak into the wall, the filters or the composer.
+  const zoneReady = zonesOfCity.some((candidate) => candidate.id === zoneId)
   const visibleCities = useMemo(() => {
     const names = new Set<string>(cityOptions)
     if (zone.city.trim()) names.add(zone.city.trim())
@@ -385,9 +388,22 @@ export default function UrbanStorytelling() {
     const inCity = zones.filter((candidate) => candidate.city.trim().toLowerCase() === city.toLowerCase())
     const first = inCity.find((candidate) => candidate.status !== 'coming') ?? inCity[0]
     setCityFilter(city)
-    if (first) switchZone(first.id)
-    else { setEditorOpen(false); setCityEditorOpen(false); setZoneError(null) }
-  }, [zones, switchZone])
+    setZoneError(null)
+    if (first) { switchZone(first.id); return }
+    // City with no DZ yet: suspend the previous city's content, centre the map
+    // on the city and open the first-DZ editor prefilled with that city.
+    setSelected(null)
+    setBundle(null)
+    setFabricPick(null)
+    const record = cities.find((candidate) => candidate.name.toLowerCase() === city.toLowerCase())
+    if (record) {
+      setPoint(record.center)
+      mapRef.current?.setView(record.center, record.zoom || 13)
+    }
+    setDraft({ ...EMPTY_DRAFT, city })
+    setEditorOpen(true)
+    setCityEditorOpen(false)
+  }, [zones, switchZone, cities])
 
   const locationErrorMessage = useCallback((error: GeolocationPositionError) => {
     if (error.code === error.PERMISSION_DENIED) return t.locationDenied
@@ -608,13 +624,14 @@ export default function UrbanStorytelling() {
   }, [currentLocation, locationAccuracy])
 
   const zoneStories = useMemo(
-    () => stories.filter((story) => story.dz === zone.id),
-    [stories, zone.id],
+    () => (zoneReady ? stories.filter((story) => story.dz === zone.id) : []),
+    [stories, zone.id, zoneReady],
   )
 
   // Load the persisted wall of the active DZ. On a static-only deploy (or
   // offline) the fetch fails quietly and the in-session wall still works.
   useEffect(() => {
+    if (!zoneReady) return
     let cancelled = false
     void (async () => {
       try {
@@ -642,7 +659,7 @@ export default function UrbanStorytelling() {
       }
     })()
     return () => { cancelled = true }
-  }, [zone.id, storage])
+  }, [zone.id, zoneReady, storage])
 
   useEffect(() => {
     const layer = storyLayer.current
@@ -720,9 +737,10 @@ export default function UrbanStorytelling() {
     setBundle(null)
     setFabricPick(null)
     setCachedAt(null)
-  }, [zone.id])
+  }, [zone.id, zoneReady])
 
   useEffect(() => {
+    if (!zoneReady) { setBundle(null); setStateLoading(false); return }
     let cancelled = false
     setStateLoading(true)
     setStateError(null)
@@ -1744,6 +1762,7 @@ export default function UrbanStorytelling() {
           </div>
 
           </div>
+          {zoneReady ? (
           <div className="au-card" id="au-state">
             <StatePanel
               ui={ui}
@@ -1761,6 +1780,18 @@ export default function UrbanStorytelling() {
             />
           </div>
 
+          ) : (
+            <div className="au-card au-empty-city" data-testid="empty-city">
+              <h2>{t.noDzTitle}</h2>
+              <p className="au-hint">{t.emptyCityHint}</p>
+              <button type="button" className="au-submit" onClick={() => {
+                setDraft({ ...EMPTY_DRAFT, city: activeCity })
+                setCityEditorOpen(false)
+                setEditorOpen(true)
+              }}>{t.newZone}</button>
+            </div>
+          )}
+          {zoneReady && (
           <div className="au-card" id="au-story">
             <h2>{t.storyTitle}</h2>
             <div className="au-presets">
@@ -1879,9 +1910,11 @@ export default function UrbanStorytelling() {
             </div>
             {error && <p className="au-error">{error}</p>}
           </div>
+          )}
         </div>
 
         <div className="au-col">
+          {zoneReady && (
           <div className="au-card" id="au-wall">
             <h2>{t.wallTitle} ({zoneStories.length})</h2>
             {zoneStories.length === 0 && <p className="au-hint">{t.wallEmpty}</p>}
@@ -1915,12 +1948,14 @@ export default function UrbanStorytelling() {
           </div>
 
 
+          )}
         </div>
       </section>
 
       {reportOpen && <ReportPanel t={t} context={reportContext} onClose={() => setReportOpen(false)} />}
 
       {/* Mobile-first action: the primary publish stays reachable while telling. */}
+      {zoneReady && (
       <div className="au-mobile-publish" data-testid="mobile-publish">
         <span className="au-media-label">{zone.label}</span>
         <button
@@ -1935,6 +1970,7 @@ export default function UrbanStorytelling() {
           {busy ? (uploadPct !== null ? `${t.uploaded} ${uploadPct}%` : t.submitting) : t.submit}
         </button>
       </div>
+      )}
 
       <footer className="au-foot">
         <span>{t.privacy}</span>
