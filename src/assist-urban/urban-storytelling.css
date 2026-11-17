@@ -664,3 +664,12 @@ html.urban-route .au-media-side h2 { font-size: 12px; }
 .au-montage-preview img, .au-montage-preview video { width: 100%; max-height: 280px; object-fit: cover; display: block; }
 .au-montage-preview .au-hint { padding: 6px 10px; margin: 0; color: #cfc8ba; }
 .au-montage-text { margin: 0; padding: 24px 16px; color: #f1ece0; font: 400 20px/1.4 "Newsreader", Georgia, serif; text-align: center; }
+
+/* Limited beta: video export (collaborators' beat renderer, bounded). */
+.au-render { margin-top: 10px; padding: 10px; border: 1px dashed #8a6a2f; border-radius: 10px; background: rgba(138, 106, 47, .05); }
+.au-render h4 { margin: 0 0 4px; font: 600 12px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase; color: #8a6a2f; }
+.au-render-options { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0; }
+.au-render-options label { display: flex; flex-direction: column; gap: 3px; font: 400 11px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; color: var(--muted, #5f5b53); }
+.au-render-options select { background: var(--bg, #fff); color: var(--ink, #191b1a); border: 1px solid var(--line, #d6cfbf); border-radius: 6px; padding: 4px 6px; }
+.au-render-result { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.au-render-result video { width: 100%; max-height: 300px; border-radius: 8px; background: #000; }

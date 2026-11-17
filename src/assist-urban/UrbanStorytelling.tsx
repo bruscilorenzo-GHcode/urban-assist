@@ -250,6 +250,8 @@ export default function UrbanStorytelling() {
 
   const [point, setPoint] = useState<[number, number]>(zone.center)
   const montageCell = useMemo(() => obfuscatePoint(point[0], point[1], 8).index, [point])
+  const renderEnabled = import.meta.env.DEV
+    || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('exp'))
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null)
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [locating, setLocating] = useState(false)
@@ -312,6 +314,24 @@ export default function UrbanStorytelling() {
     setUi(next)
     storeUiLang(next, storage)
   }, [storage])
+
+  const attachRender = useCallback((file: File) => {
+    if (totalSize([...pendingMedia.map((item) => item.file), file]) > MEDIA_TOTAL_BUDGET) {
+      setError(t.montageRenderTooLarge)
+      return
+    }
+    setPendingMedia((prev) => [{
+      key: `render_${Date.now()}`,
+      dz: zoneIdRef.current,
+      file,
+      timeline: '',
+      caption: '',
+      status: 'pending',
+      progress: 0,
+      received: [],
+      createdAt: new Date().toISOString(),
+    }, ...prev])
+  }, [pendingMedia, t])
 
   const applyMontage = useCallback((plan: MontagePlan) => {
     setPendingMedia((prev) => {
@@ -1835,6 +1855,8 @@ export default function UrbanStorytelling() {
               themes={(bundle?.pack?.themes ?? []).map((theme) => ({ id: theme.id, label: theme.label }))}
               cell={montageCell}
               onApply={applyMontage}
+              renderEnabled={renderEnabled}
+              onAttachRender={attachRender}
             />
 
             <h3>{t.consentTitle}</h3>
