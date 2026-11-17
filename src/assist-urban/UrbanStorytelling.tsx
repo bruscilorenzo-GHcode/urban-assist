@@ -23,6 +23,9 @@ import { loadZoneTokens, saveZoneTokens, type ZoneTokens } from './my-zones'
 import { geocodePlace, geocodePlaceInCity } from './geocode'
 import type { City } from './cities'
 import StatePanel from './state-panel'
+import MontagePanel from './montage-panel'
+import type { MontagePlan } from '../core/montage/types.js'
+import { obfuscatePoint } from './pipeline/pii.js'
 import ProjectPanel from './project-panel'
 import { FabricOverlay, type FabricPick } from './fabric-overlay'
 import { LivingCanvas } from './living-canvas'
@@ -246,6 +249,7 @@ export default function UrbanStorytelling() {
   }, [cities, zones])
 
   const [point, setPoint] = useState<[number, number]>(zone.center)
+  const montageCell = useMemo(() => obfuscatePoint(point[0], point[1], 8).index, [point])
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null)
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [locating, setLocating] = useState(false)
@@ -308,6 +312,21 @@ export default function UrbanStorytelling() {
     setUi(next)
     storeUiLang(next, storage)
   }, [storage])
+
+  const applyMontage = useCallback((plan: MontagePlan) => {
+    setPendingMedia((prev) => {
+      const byKey = new Map(prev.map((item) => [item.key, item]))
+      const ordered = plan.order
+        .map((key) => byKey.get(key))
+        .filter((item): item is PendingMedia => !!item)
+      const rest = prev.filter((item) => !plan.order.includes(item.key))
+      return [...ordered, ...rest].map((item) => ({
+        ...item,
+        caption: plan.captions[item.key] ?? item.caption,
+        timeline: plan.timelines[item.key] ?? item.timeline,
+      }))
+    })
+  }, [])
 
   const togglePilot = useCallback(() => {
     setPilotMode((on) => {
@@ -1799,6 +1818,24 @@ export default function UrbanStorytelling() {
               </div>
             )}
             <p className="au-hint">{t.uploadHint}</p>
+
+            <MontagePanel
+              t={t}
+              ui={ui}
+              items={pendingMedia.map((item) => ({
+                key: item.key,
+                kind: item.kind ?? (item.file.type.startsWith('video') ? 'video'
+                  : item.file.type.startsWith('audio') ? 'audio'
+                    : item.file.type.startsWith('text') ? 'text' : 'image'),
+                size: item.file.size,
+                caption: item.caption,
+                timeline: item.timeline,
+                file: item.file,
+              }))}
+              themes={(bundle?.pack?.themes ?? []).map((theme) => ({ id: theme.id, label: theme.label }))}
+              cell={montageCell}
+              onApply={applyMontage}
+            />
 
             <h3>{t.consentTitle}</h3>
             <div className="au-consent">

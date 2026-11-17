@@ -647,3 +647,20 @@ html.urban-route .au-media-side h2 { font-size: 12px; }
 }
 .au-living-pick p { margin: 0; font-size: 13px; color: var(--ink, #191b1a); }
 .au-living-pick .au-chip { align-self: flex-start; }
+
+/* Automatic montage assembler: filtering-category typologies, storyboard,
+ * coherence report and a light preview player (no encoding). */
+.au-montage { margin: 12px 0 4px; padding: 12px; border: 1px dashed #8a6a2f; border-radius: 12px; background: rgba(138, 106, 47, .06); }
+.au-montage-styles, .au-montage-themes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.au-montage-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin: 8px 0; }
+.au-montage-warn { font: 500 11px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; color: #8a6a2f; background: rgba(138, 106, 47, .12); border-radius: 999px; padding: 2px 9px; }
+.au-montage-board { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.au-montage-board li { display: grid; grid-template-columns: 74px 48px 1fr; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line, #d6cfbf); background: var(--surface, #f7f2e6); }
+.au-montage-board li.on { border-color: #3f7f4e; box-shadow: 0 0 0 1px #3f7f4e inset; }
+.au-montage-role { font: 600 10.5px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .05em; color: #3f7f4e; }
+.au-montage-kind, .au-montage-time { font: 400 11px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; color: var(--muted, #5f5b53); }
+.au-montage-caption { font: 400 13px "Newsreader", Georgia, serif; color: var(--ink, #191b1a); }
+.au-montage-preview { margin: 8px 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--line, #d6cfbf); background: #0b1220; }
+.au-montage-preview img, .au-montage-preview video { width: 100%; max-height: 280px; object-fit: cover; display: block; }
+.au-montage-preview .au-hint { padding: 6px 10px; margin: 0; color: #cfc8ba; }
+.au-montage-text { margin: 0; padding: 24px 16px; color: #f1ece0; font: 400 20px/1.4 "Newsreader", Georgia, serif; text-align: center; }
