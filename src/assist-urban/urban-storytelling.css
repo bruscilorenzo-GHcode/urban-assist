@@ -673,3 +673,17 @@ html.urban-route .au-media-side h2 { font-size: 12px; }
 .au-render-options select { background: var(--bg, #fff); color: var(--ink, #191b1a); border: 1px solid var(--line, #d6cfbf); border-radius: 6px; padding: 4px 6px; }
 .au-render-result { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .au-render-result video { width: 100%; max-height: 300px; border-radius: 8px; background: #000; }
+
+/* BULK upload: many files in, reviewable candidates out. */
+.au-bulk { margin: 12px 0; padding: 12px; border: 1px dashed #178f80; border-radius: 12px; background: rgba(23, 143, 128, .05); }
+.au-bulk h3 { margin: 0 0 4px; }
+.au-bulk h3 em { font: 600 10px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; font-style: normal; letter-spacing: .08em; text-transform: uppercase; color: #178f80; background: rgba(23, 143, 128, .12); border-radius: 999px; padding: 2px 8px; }
+.au-bulk-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.au-bulk-tags { display: flex; flex-direction: column; gap: 4px; font: 500 12px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; color: var(--muted, #5f5b53); margin: 6px 0; }
+.au-bulk-tags input { background: var(--bg, #fff); color: var(--ink, #191b1a); border: 1px solid var(--line, #d6cfbf); border-radius: 8px; padding: 8px 10px; font: 400 14px "Newsreader", Georgia, serif; }
+.au-bulk-candidates { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.au-bulk-candidates li { border: 1px solid var(--line, #d6cfbf); border-radius: 10px; padding: 10px 12px; background: var(--surface, #f7f2e6); }
+.au-bulk-cand-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.au-bulk-candidates p { margin: 6px 0; font: 400 15px/1.5 "Newsreader", Georgia, serif; color: var(--ink, #191b1a); }
+.au-bulk-taglist { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
+.au-bulk-taglist span { font: 500 10.5px "Space Grotesk", ui-sans-serif, system-ui, sans-serif; color: #4f7f6f; background: rgba(23, 143, 128, .10); border-radius: 999px; padding: 2px 8px; }

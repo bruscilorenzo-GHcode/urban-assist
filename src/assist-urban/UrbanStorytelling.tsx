@@ -24,6 +24,8 @@ import { geocodePlace, geocodePlaceInCity } from './geocode'
 import type { City } from './cities'
 import StatePanel from './state-panel'
 import MontagePanel from './montage-panel'
+import BulkPanel from './bulk-panel'
+import type { BulkCandidate } from './bulk/agents.js'
 import type { MontagePlan } from '../core/montage/types.js'
 import { obfuscatePoint } from './pipeline/pii.js'
 import ProjectPanel from './project-panel'
@@ -332,6 +334,29 @@ export default function UrbanStorytelling() {
       createdAt: new Date().toISOString(),
     }, ...prev])
   }, [pendingMedia, t])
+
+  const openBulkCandidate = useCallback((candidate: BulkCandidate) => {
+    setText(candidate.utterance)
+    setLang(ui === 'en' ? 'en' : 'it')
+    if (candidate.place) {
+      setPoint(candidate.place.center)
+      mapRef.current?.setView(candidate.place.center, 15)
+      setGeoMode('grid')
+    }
+    const stamp = Date.now()
+    setPendingMedia(candidate.items.map((item, index) => ({
+      key: `bulk_${stamp}_${index}`,
+      dz: zoneIdRef.current,
+      file: item.file,
+      timeline: candidate.montagePlan.timelines[item.name] ?? '',
+      caption: candidate.montagePlan.captions[item.name] ?? '',
+      status: 'pending',
+      progress: 0,
+      received: [],
+      createdAt: new Date().toISOString(),
+    })))
+    document.getElementById('au-story')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [ui])
 
   const applyMontage = useCallback((plan: MontagePlan) => {
     setPendingMedia((prev) => {
@@ -1822,6 +1847,15 @@ export default function UrbanStorytelling() {
               </label>
             </div>
             {comparative && <p className="au-hint au-comparative-hint">{t.comparativeHint}</p>}
+
+            <BulkPanel
+              t={t}
+              ui={ui}
+              zones={zones}
+              cities={cities}
+              onOpen={openBulkCandidate}
+            />
+
             {pendingMedia.length > 0 && (
               <div className="au-files">
                 <span className="au-media-label">{(totalSize(pendingMedia.map((item) => item.file)) / 1024 / 1024).toFixed(2)} / 50 MB</span>
