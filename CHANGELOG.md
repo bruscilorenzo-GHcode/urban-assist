@@ -2,6 +2,29 @@
 
 All notable changes to the URBAN ASSIST reference. Tags mark fork baselines.
 
+## v1.3.0 — 2026-11-19
+
+**Post-production for the field: BULK ingest and the automatic assembler.**
+
+- **BULK upload** (composer, beta): many media at once, batch tags, deterministic
+  multi-agent post-production — TaggerAgent (tags/date/day-part from names + batch
+  tags), TimeAgent (day type, service period), **GeoAgent (place from tags only**,
+  exact tokens against curated/pilot zones and cities, anonymous cell, source and
+  confidence declared), UtteranceAgent (one de-identified sentence, no invention),
+  MontageAgent (typology from the filtering categories), CoherenceAgent (groups by
+  place+date, warnings, trim beyond 8 media). Review list → “open in the composer”.
+- **Automatic assembler** always available on the composer media: filtering-category
+  typologies (functional, fictional, proximity, place, topic, community), theme bias,
+  coherence report, storyboard, preview, apply captions/timelines, export plan JSON.
+- **Limited video export (beta)**: the collaborators' beat-aligned renderer, bounded
+  (≤15 s, ≤8 clips, ≤20 MB), gated behind `?exp`, cancellable; pure-part tests.
+- **Bulk test limits**: max 40 files · 50 MB/file · 300 MB/batch; explicit errors.
+- Empty-city state: a city without DZs no longer shows the previous city's content;
+  the map centres on the city and opens the first-DZ editor.
+- Design: Space Grotesk, bluer night ground, map-first layout with filters under the
+  map, selected-story media beside the map, mobile publish bar.
+- Median metadata fix; symbolic media icons; pilot scoping per city.
+
 ## v1.1.0 — 2026-11-16
 
 **Map-first layout and the urban identity.**
